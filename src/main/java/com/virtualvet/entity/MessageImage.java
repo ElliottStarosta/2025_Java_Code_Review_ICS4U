@@ -87,7 +87,7 @@ public class MessageImage {
                 "id=" + id +
                 ", imageUrl='" + imageUrl + '\'' +
                 ", imageOrder=" + imageOrder +
-                ", analysisResult='" + (analysisResult != null ? analysisResult.substring(0, Math.min(30, analysisResult.length())) + "..." : null) + '\'' +
+                ", analysisResult='" + (analysisResult != null ? analysisResult : null) + '\'' +
                 '}';
     }
 }

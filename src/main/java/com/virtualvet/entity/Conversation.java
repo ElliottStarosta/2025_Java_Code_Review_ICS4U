@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.virtualvet.enums.model.UrgencyLevel;
 
 import java.util.ArrayList;
@@ -26,10 +27,8 @@ public class Conversation {
     private LocalDateTime lastActivity;
 
     @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnore
     private List<Message> messages = new ArrayList<>();
-
-    @OneToMany(mappedBy = "conversation", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<AnimalProfile> animalProfiles = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     private UrgencyLevel lastUrgencyLevel = UrgencyLevel.LOW;
@@ -52,7 +51,6 @@ public class Conversation {
     public void setLastUrgencyLevel(UrgencyLevel lastUrgencyLevel) {
         this.lastUrgencyLevel = lastUrgencyLevel;
     }
-
 
     public Long getId() {
         return id;
@@ -92,14 +90,6 @@ public class Conversation {
 
     public void setMessages(List<Message> messages) {
         this.messages = messages;
-    }
-
-    public List<AnimalProfile> getAnimalProfiles() {
-        return animalProfiles;
-    }
-
-    public void setAnimalProfiles(List<AnimalProfile> animalProfiles) {
-        this.animalProfiles = animalProfiles;
     }
 
     public void updateLastActivity() {

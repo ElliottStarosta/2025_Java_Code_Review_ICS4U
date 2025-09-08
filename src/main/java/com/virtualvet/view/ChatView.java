@@ -2,6 +2,7 @@ package com.virtualvet.view;
 
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.ClientCallable;
+import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -19,16 +20,21 @@ import com.vaadin.flow.component.upload.Upload;
 import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.virtualvet.dto.StructuredVetResponse;
+import com.virtualvet.model.ConversationContext;
+import com.virtualvet.service.ChatService;
 import com.virtualvet.util.ApiClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.shaded.gson.JsonObject;
 import com.vaadin.flow.component.upload.receivers.MultiFileMemoryBuffer;
+import com.vaadin.flow.function.SerializableRunnable;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -51,9 +57,17 @@ public class ChatView extends VerticalLayout {
     private Button uploadButton;
     private Upload upload;
     private MultiFileMemoryBuffer multiFileBuffer;
-    private List<UploadedFileData> uploadedFiles = new ArrayList<>(); // Changed from uploadedImageData
+    private List<UploadedFileData> uploadedFiles = new ArrayList<>();
+
+    private String lastMessageSender = null; // Track who sent the last message
+    private List<Div> currentMessageGroup = new ArrayList<>(); // Track current message group
+
+    private StructuredVetResponse lastStructuredResponse;
 
     private Div imagePreviewContainer;
+
+    @Autowired
+    private ChatService chatService;
 
     private String currentSessionId;
     private Div emergencyBanner;
@@ -67,7 +81,7 @@ public class ChatView extends VerticalLayout {
         setSpacing(false);
 
         createComponents();
-        setupLayout(); // This should call createInputArea() internally
+        setupLayout();
         startNewSession();
     }
 
@@ -86,7 +100,6 @@ public class ChatView extends VerticalLayout {
                 .set("min-height", "0")
                 .set("padding-bottom", "80px")
                 .set("flex", "1");
-        // .set("overflow", "hidden");
 
         messagesScroller = new Scroller(messagesContainer);
         messagesScroller.setSizeFull();
@@ -98,23 +111,9 @@ public class ChatView extends VerticalLayout {
                 .set("background", "white")
                 .set("overflow-x", "hidden")
                 .set("overflow-y", "auto");
-
     }
 
     private void createInputArea() {
-        // Image preview container (above input area)
-        imagePreviewContainer = new Div();
-        imagePreviewContainer.setWidthFull();
-        imagePreviewContainer.getStyle()
-                .set("padding", "8px 16px 0 16px")
-                .set("background", "white")
-                .set("display", "flex")
-                .set("flex-wrap", "wrap")
-                .set("gap", "8px")
-                .set("min-height", "0")
-                .set("transition", "all 0.2s ease");
-        imagePreviewContainer.setVisible(false); // Hidden by default
-
         // Message input with phone-like styling
         messageInput = new TextArea();
         messageInput.setPlaceholder("Type a message...");
@@ -146,76 +145,61 @@ public class ChatView extends VerticalLayout {
                 .set("border-color", "#d1d5db")
                 .set("background", "#f9fafb"));
 
-        messageInput.addKeyDownListener(e -> {
-            if (e.getKey().equals("Enter") && !isWaitingForResponse) {
-                // Use JavaScript to check if Shift key is pressed
-                getElement().executeJs("return $0.shiftKey;", e)
-                        .then(Boolean.class, isShiftPressed -> {
-                            if (!isShiftPressed) {
-                                sendMessage();
-                            }
-                        });
-            }
-        });
+        // messageInput.addKeyDownListener(Key.ENTER, e -> {
+        // if (!e.isShiftKey()) {
+        // sendMessage();
+        // }
+        // });
 
-        // File upload component using new UploadHandler API
+        // File upload component
         multiFileBuffer = new MultiFileMemoryBuffer();
 
         upload = new Upload(multiFileBuffer);
         upload.setAcceptedFileTypes("image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp");
-        upload.setMaxFiles(5); // Allow up to five images
-        upload.setMaxFileSize(10 * 1024 * 1024); // 10MB per file
-        upload.setDropAllowed(false); // Disable drag-and-drop
+        upload.setMaxFiles(5);
+        upload.setMaxFileSize(10 * 1024 * 1024);
+        upload.setDropAllowed(false);
+
         upload.addSucceededListener(event -> {
             try {
                 String fileName = event.getFileName();
-                System.out.println("File upload succeeded: " + fileName);
                 InputStream inputStream = multiFileBuffer.getInputStream(fileName);
                 byte[] data = inputStream.readAllBytes();
                 String contentType = event.getMIMEType();
-                System.out.println("File size: " + data.length + " bytes, type: " + contentType);
 
                 UploadedFileData fileData = new UploadedFileData(fileName, contentType, data);
                 uploadedFiles.add(fileData);
 
-                // Add to UI on the UI thread
                 getUI().ifPresent(ui -> ui.access(() -> {
-                    addImagePreview(fileName, fileData.getBase64Data(), uploadedFiles.size() - 1);
-                    showNotification("File uploaded: " + fileName, false);
+                    showImagePreview(fileData);
+                    showNotification("Image attached: " + fileName, false);
                     ui.push();
                 }));
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
         });
-        upload.addStartedListener(event -> {
-            System.out.println("Upload started: " + event.getFileName());
-        });
 
-        upload.addFinishedListener(event -> {
-            System.out.println("Upload finished: " + event.getFileName());
-        });
-
-        // Hide the default upload component completely
+        // Hide the default upload component
         upload.getStyle()
                 .set("position", "absolute")
-                .set("right", "44px")
-                .set("top", "50%")
+                .set("right", "50px")
+                .set("top", "75%")
                 .set("transform", "translateY(-50%)")
                 .set("width", "32px")
                 .set("height", "32px")
                 .set("opacity", "0")
                 .set("z-index", "20")
-                .set("pointer-events", "none"); // Disable pointer events on the hidden upload
+                .set("pointer-events", "none");
 
-        // Upload button (paperclip icon) - this will trigger the file dialog
+        // Upload button with blue background
         uploadButton = new Button();
         Icon uploadIcon = new Icon(VaadinIcon.PAPERCLIP);
-        uploadIcon.setSize("20px");
-        uploadIcon.setColor("#6b7280");
+        uploadIcon.setSize("18px");
+        uploadIcon.setColor("white");
         uploadButton.setIcon(uploadIcon);
         uploadButton.getStyle()
-                .set("background", "transparent")
+                .set("background", "#2563eb")
                 .set("border", "none")
                 .set("border-radius", "50%")
                 .set("width", "32px")
@@ -225,26 +209,25 @@ public class ChatView extends VerticalLayout {
                 .set("justify-content", "center")
                 .set("cursor", "pointer")
                 .set("position", "absolute")
-                .set("right", "44px")
+                .set("right", "50px")
                 .set("top", "50%")
                 .set("transform", "translateY(-50%)")
                 .set("z-index", "10")
-                .set("transition", "all 0.2s ease");
+                .set("transition", "all 0.2s ease")
+                .set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)");
 
-        // Add click listener to trigger file upload
         uploadButton.addClickListener(e -> {
-            // Trigger the file dialog by clicking the upload component
             upload.getElement().executeJs("this.shadowRoot.querySelector('input[type=file]').click()");
         });
 
-        // Send button
+        // Send button with blue background
         sendButton = new Button();
         Icon sendIcon = new Icon(VaadinIcon.PAPERPLANE);
-        sendIcon.setSize("18px");
-        sendIcon.setColor("#2563eb");
+        sendIcon.setSize("16px");
+        sendIcon.setColor("white");
         sendButton.setIcon(sendIcon);
         sendButton.getStyle()
-                .set("background", "transparent")
+                .set("background", "#2563eb")
                 .set("border", "none")
                 .set("border-radius", "50%")
                 .set("width", "32px")
@@ -258,7 +241,8 @@ public class ChatView extends VerticalLayout {
                 .set("top", "50%")
                 .set("transform", "translateY(-50%)")
                 .set("z-index", "10")
-                .set("transition", "all 0.2s ease");
+                .set("transition", "all 0.2s ease")
+                .set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)");
 
         sendButton.addClickListener(e -> sendMessage());
 
@@ -286,7 +270,7 @@ public class ChatView extends VerticalLayout {
         inputArea.setPadding(false);
         inputArea.setSpacing(false);
         inputArea.setWidthFull();
-        inputArea.add(imagePreviewContainer, inputContainer);
+        inputArea.add(inputContainer);
         inputArea.getStyle()
                 .set("background", "white")
                 .set("border-top", "1px solid #e5e7eb")
@@ -305,28 +289,39 @@ public class ChatView extends VerticalLayout {
         add(bottomStickyContainer);
     }
 
-    // Add method to handle image preview
-    private void addImagePreview(String fileName, String base64Data, int fileIndex) {
-        Div previewItem = new Div();
-        previewItem.getStyle()
+    private void showImagePreview(UploadedFileData fileData) {
+        if (imagePreviewContainer == null) {
+            imagePreviewContainer = new Div();
+            imagePreviewContainer.getStyle()
+                    .set("display", "flex")
+                    .set("gap", "8px")
+                    .set("flex-wrap", "wrap")
+                    .set("margin-bottom", "8px")
+                    .set("padding", "0 16px");
+
+            // Insert before the input area
+            getChildren().forEach(component -> {
+                if (component.getElement().getTag().equals("div") &&
+                        component.getElement().getStyle().get("position").equals("sticky")) {
+                    getElement().insertChild(getElement().getChildCount() - 1, imagePreviewContainer.getElement());
+                }
+            });
+        }
+
+        Div preview = new Div();
+        preview.getStyle()
                 .set("position", "relative")
-                .set("display", "inline-block")
-                .set("border-radius", "8px")
-                .set("overflow", "hidden")
-                .set("background", "#f3f4f6")
-                .set("border", "1px solid #e5e7eb");
+                .set("display", "inline-block");
 
-        // Image element
-        Image previewImage = new Image();
-        previewImage.setSrc("data:image/png;base64," + base64Data);
-        previewImage.setAlt(fileName);
-        previewImage.getStyle()
-                .set("width", "80px")
-                .set("height", "80px")
+        Image thumbnail = new Image("data:" + fileData.getContentType() + ";base64," + fileData.getBase64Data(),
+                "Preview");
+        thumbnail.getStyle()
+                .set("width", "60px")
+                .set("height", "60px")
                 .set("object-fit", "cover")
-                .set("display", "block");
+                .set("border-radius", "8px")
+                .set("border", "2px solid #e5e7eb");
 
-        // Remove button (X)
         Button removeButton = new Button();
         Icon removeIcon = new Icon(VaadinIcon.CLOSE_SMALL);
         removeIcon.setSize("16px");
@@ -355,70 +350,57 @@ public class ChatView extends VerticalLayout {
                 .set("line-height", "1");
 
         removeButton.addClickListener(e -> {
-            // Remove from uploadedFiles list
-            if (fileIndex < uploadedFiles.size()) {
-                uploadedFiles.remove(fileIndex);
+            uploadedFiles.removeIf(f -> f.getFilename().equals(fileData.getFilename()));
+            imagePreviewContainer.remove(preview);
+            if (uploadedFiles.isEmpty()) {
+                remove(imagePreviewContainer);
+                imagePreviewContainer = null;
             }
-            previewItem.removeFromParent();
-            updatePreviewContainerVisibility();
-            // Refresh preview container to update indices
-            refreshImagePreviews();
         });
 
-        previewItem.add(previewImage, removeButton);
-        imagePreviewContainer.add(previewItem);
-        updatePreviewContainerVisibility();
-
-    }
-
-    // Add method to refresh image previews after removal:
-    private void refreshImagePreviews() {
-        imagePreviewContainer.removeAll();
-        for (int i = 0; i < uploadedFiles.size(); i++) {
-            UploadedFileData fileData = uploadedFiles.get(i);
-            addImagePreview(fileData.getFilename(), fileData.getBase64Data(), i);
-        }
-    }
-
-    // Method to show/hide preview container
-    private void updatePreviewContainerVisibility() {
-        boolean hasImages = imagePreviewContainer.getChildren().count() > 0;
-        imagePreviewContainer.setVisible(hasImages);
-
-        if (hasImages) {
-            imagePreviewContainer.getStyle().set("padding", "8px 16px");
-        } else {
-            imagePreviewContainer.getStyle().set("padding", "0");
-        }
+        preview.add(thumbnail, removeButton);
+        imagePreviewContainer.add(preview);
     }
 
     private void setupLayout() {
+        // Force the main ChatView to have proper constraints
         getStyle()
                 .set("height", "100vh")
                 .set("max-height", "100vh")
+                .set("overflow", "hidden") // Critical: prevent any scrolling on main container
                 .set("display", "flex")
                 .set("flex-direction", "column")
                 .set("background", "white")
                 .set("padding", "0")
                 .set("margin", "0");
 
-        // Create main container
-        VerticalLayout mainContainer = new VerticalLayout();
-        mainContainer.setPadding(false);
-        mainContainer.setSpacing(false);
-        mainContainer.setSizeFull();
-        mainContainer.getStyle()
-                .set("height", "100%")
-                .set("overflow", "hidden");
+        // Ensure Vaadin's VerticalLayout doesn't add its own spacing/padding
+        setPadding(false);
+        setSpacing(false);
+        setSizeFull();
 
-        // Add emergency banner and messages scroller
-        mainContainer.add(emergencyBanner, messagesScroller);
-        mainContainer.setFlexGrow(1, messagesScroller);
+        // Create messages container that takes up remaining space
+        VerticalLayout messagesArea = new VerticalLayout();
+        messagesArea.setPadding(false);
+        messagesArea.setSpacing(false);
+        messagesArea.setSizeFull();
+        messagesArea.getStyle()
+                .set("flex", "1 1 0") // Flex grow, shrink, and base 0
+                .set("min-height", "0") // Critical: allows flex child to shrink below content size
+                .set("overflow", "hidden")
+                .set("display", "flex")
+                .set("flex-direction", "column")
+                .set("height", "0"); // Force height calculation from flex
 
-        // Add main container first, then input will be added at bottom
-        add(mainContainer);
+        // Add emergency banner and messages scroller to messages area
+        messagesArea.add(emergencyBanner, messagesScroller);
+        messagesArea.setFlexGrow(1, messagesScroller);
 
-        // Create input area (this will automatically go to bottom)
+        // Add messages area to main layout
+        add(messagesArea);
+        setFlexGrow(1, messagesArea);
+
+        // Create input area separately - this will be sticky at bottom
         createInputArea();
     }
 
@@ -430,7 +412,13 @@ public class ChatView extends VerticalLayout {
                 "How can I help you and your pet today?"));
     }
 
-   
+    private void clearImagePreviews() {
+        if (imagePreviewContainer != null) {
+            remove(imagePreviewContainer);
+            imagePreviewContainer = null;
+        }
+    }
+
     @ClientCallable
     private void sendMessage() {
         String message = messageInput.getValue().trim();
@@ -438,22 +426,29 @@ public class ChatView extends VerticalLayout {
             return;
         }
 
+        conversationHistory.add(new ConversationMessage("user", message));
+
         if (currentSessionId == null) {
             showNotification("Please wait, initializing session...", false);
             return;
         }
 
-        // Add user message
-        addUserMessage(message);
+        // Add user message with attachments
+        addUserMessage(message, new ArrayList<>(uploadedFiles));
         messageInput.clear();
+        clearImagePreviews();
+
+        // Clear uploaded files immediately
+        List<UploadedFileData> filesToProcess = new ArrayList<>(uploadedFiles);
+        uploadedFiles.clear();
 
         // Show typing indicator and disable input
         showTypingIndicator();
         setInputEnabled(false);
         scrollToBottom();
 
-        // First analyze images if any, then send chat message
-        analyzeImagesAsync(new ArrayList<>(uploadedFiles))
+        // Process the message
+        analyzeImagesAsync(filesToProcess)
                 .thenCompose(imageAnalysisResult -> {
                     return CompletableFuture.supplyAsync(() -> {
                         try {
@@ -467,9 +462,12 @@ public class ChatView extends VerticalLayout {
                                 finalMessage = message + "\n\nImage analysis results:\n" + imageAnalysisResult;
                             }
                             requestBody.add("message", finalMessage);
+                            ConversationContext context = chatService.buildConversationContext(currentSessionId);
+                            System.out.println("Built context: " + context);
+                            requestBody.add("conversationHistory", context);
 
-                            // Still include the actual image files for the chat API if needed
-                            for (UploadedFileData fileData : uploadedFiles) {
+                            // Include the actual image files
+                            for (UploadedFileData fileData : filesToProcess) {
                                 ByteArrayResource fileResource = new ByteArrayResource(fileData.getData()) {
                                     @Override
                                     public String getFilename() {
@@ -496,18 +494,14 @@ public class ChatView extends VerticalLayout {
                         ui.access(() -> {
                             try {
                                 removeTypingIndicator();
-
-                                // Split response into natural message chunks
+                                System.out.println("Bot response: " + responseText);
                                 List<String> messages = splitIntoMessages(responseText);
                                 addBotMessages(messages);
-
                                 checkForEmergency(responseText);
                                 setInputEnabled(true);
-                                clearImagePreviews();
                                 messageInput.focus();
                                 scrollToBottom();
                                 ui.push();
-
                             } catch (Exception e) {
                                 System.err.println("UI update error: " + e.getMessage());
                             }
@@ -520,12 +514,11 @@ public class ChatView extends VerticalLayout {
                         ui.access(() -> {
                             try {
                                 removeTypingIndicator();
-                                addBotMessage("I'm experiencing technical difficulties. Please try again.");
+                                addBotMessage("I'm experiencing technical difficulties. Please try again.", true);
                                 setInputEnabled(true);
                                 messageInput.focus();
                                 scrollToBottom();
                                 ui.push();
-
                             } catch (Exception e) {
                                 System.err.println("Error handling UI update: " + e.getMessage());
                             }
@@ -600,13 +593,6 @@ public class ChatView extends VerticalLayout {
         });
     }
 
-    // Clear after sending a msg
-    private void clearImagePreviews() {
-        imagePreviewContainer.removeAll();
-        uploadedFiles.clear(); // Changed from uploadedImageData
-        updatePreviewContainerVisibility();
-    }
-
     private List<String> splitIntoMessages(String text) {
         List<String> messages = new ArrayList<>();
 
@@ -639,8 +625,6 @@ public class ChatView extends VerticalLayout {
                 }
             }
         } else {
-            // No split marker found - use fallback logic for backwards compatibility
-
             // For shorter responses, just return as single message
             if (cleanedText.length() <= 400) {
                 messages.add(cleanedText);
@@ -655,10 +639,7 @@ public class ChatView extends VerticalLayout {
             if (hasOrganizedContent) {
                 // Split at logical breakpoints for organized content
                 List<String> parts = new ArrayList<>();
-
-                // Look for natural breaking points
                 String[] paragraphs = cleanedText.split("\\n\\s*\\n");
-
                 StringBuilder currentPart = new StringBuilder();
 
                 for (String paragraph : paragraphs) {
@@ -666,10 +647,8 @@ public class ChatView extends VerticalLayout {
                     if (paragraph.isEmpty())
                         continue;
 
-                    // Check if this is a good breaking point
                     boolean isBreakPoint = false;
 
-                    // Break before common phrases
                     if (paragraph.toLowerCase().startsWith("for now") ||
                             paragraph.toLowerCase().startsWith("you can try") ||
                             paragraph.toLowerCase().startsWith("here are") ||
@@ -678,8 +657,6 @@ public class ChatView extends VerticalLayout {
                         isBreakPoint = true;
                     }
 
-                    // Break if current part is getting long (over 400 chars) and this is a new
-                    // section
                     if (currentPart.length() > 400 &&
                             (paragraph.startsWith("•") || paragraph.matches("^\\d+\\..*") ||
                                     paragraph.startsWith("**"))) {
@@ -701,9 +678,7 @@ public class ChatView extends VerticalLayout {
                     parts.add(currentPart.toString().trim());
                 }
 
-                // If we didn't get good splits, fall back to simpler approach
                 if (parts.size() <= 1) {
-                    // Try splitting at double line breaks
                     String[] simpleParts = cleanedText.split("\\n\\s*\\n");
                     for (String part : simpleParts) {
                         part = part.trim();
@@ -716,12 +691,10 @@ public class ChatView extends VerticalLayout {
                 }
 
             } else {
-                // For regular text without lists, split into reasonable chunks
                 int maxLength = 300;
                 if (cleanedText.length() <= maxLength) {
                     messages.add(cleanedText);
                 } else {
-                    // Split by sentences where possible
                     String[] sentences = cleanedText.split("(?<=[.!?])\\s+");
                     StringBuilder currentMessage = new StringBuilder();
 
@@ -751,67 +724,263 @@ public class ChatView extends VerticalLayout {
         for (int i = 0; i < messages.size(); i++) {
             final int index = i;
             final String message = messages.get(i);
+            final boolean isLastInGroup = (i == messages.size() - 1);
 
-            // Add small delay between messages for natural feel
-            UI ui = getUI().orElse(null);
-            if (ui != null) {
-                ui.access(() -> {
-                    try {
-                        Thread.sleep(index * 800 + 300); // Stagger messages
-                        ui.access(() -> {
-                            addBotMessage(message);
-                            scrollToBottom();
-                            ui.push();
-                        });
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        addBotMessage(message);
-                        scrollToBottom();
-                        ui.push();
-                    }
-                });
+            // Use custom delay if available from structured response
+            final int delayFinal;
+            if (lastStructuredResponse != null &&
+                    index < lastStructuredResponse.getMessages().size()) {
+                delayFinal = lastStructuredResponse.getMessages().get(index).getDelay();
+            } else {
+                delayFinal = 800; // default
             }
+
+            // Calculate total delay for this message
+            int totalDelay = (index * delayFinal) + 300;
+
+            // Schedule the message addition using CompletableFuture with proper delay
+            CompletableFuture.delayedExecutor(totalDelay, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .execute(() -> {
+                        UI ui = getUI().orElse(null);
+                        if (ui != null) {
+                            ui.access(() -> {
+                                addBotMessage(message, isLastInGroup);
+                                scrollToBottom();
+                                ui.push();
+                            });
+                        }
+                    });
         }
     }
 
-    private void addUserMessage(String text) {
-        Div messageRow = new Div();
-        messageRow.setWidthFull();
-        messageRow.getStyle()
-                .set("display", "flex")
-                .set("justify-content", "flex-end")
-                .set("margin-bottom", "8px")
-                .set("padding", "0 4px");
-
-        Div messageBubble = new Div();
-        messageBubble.getElement().setProperty("innerHTML", formatText(text));
-        messageBubble.getStyle()
-                .set("background", "#2563eb")
-                .set("color", "white")
-                .set("padding", "12px 16px")
-                .set("border-radius", "18px 18px 6px 18px")
-                .set("max-width", "80%")
-                .set("min-width", "20px")
-                .set("font-size", "16px")
-                .set("font-family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif")
-                .set("line-height", "1.4")
-                .set("word-wrap", "break-word")
-                .set("white-space", "pre-wrap");
-
-        messageRow.add(messageBubble);
-        messagesContainer.add(messageRow);
-        messageElements.add(messageRow);
+    private void addUserMessage(String text, List<UploadedFileData> attachments) {
+    // Update message group tracking
+    if (!"user".equals(lastMessageSender)) {
+        // Starting a new user message group
+        hideAvatarsInPreviousGroup();
+        currentMessageGroup.clear();
+        lastMessageSender = "user";
     }
 
-    private void addBotMessage(String text) {
+    Div messageRow = new Div();
+    messageRow.setWidthFull();
+    messageRow.getStyle()
+            .set("display", "flex")
+            .set("justify-content", "flex-end")
+            .set("margin-bottom", "12px")
+            .set("padding", "0 4px")
+            .set("position", "relative");
+
+    // User avatar - initially hidden, will be shown only on the last message
+    Div userAvatar = new Div();
+    userAvatar.setText("👤");
+    userAvatar.getStyle()
+            .set("width", "24px")
+            .set("height", "24px")
+            .set("border-radius", "50%")
+            .set("background", "#e5e7eb")
+            .set("display", "none") // Initially hidden
+            .set("align-items", "center")
+            .set("justify-content", "center")
+            .set("font-size", "12px")
+            .set("margin-left", "8px")
+            .set("margin-top", "auto")
+            .set("flex-shrink", "0");
+
+    // Add class for easier identification
+    userAvatar.addClassName("user-avatar");
+
+    // Message content container
+    Div messageContent = new Div();
+    messageContent.getStyle()
+            .set("display", "flex")
+            .set("flex-direction", "column")
+            .set("align-items", "flex-end")
+            .set("max-width", "80%")
+            .set("margin-right", "32px"); // Add right margin for avatar space
+
+    // Image attachments (above message bubble)
+    if (!attachments.isEmpty()) {
+        Div attachmentContainer = new Div();
+        attachmentContainer.getStyle()
+                .set("display", "flex")
+                .set("flex-wrap", "wrap")
+                .set("gap", "4px")
+                .set("margin-bottom", "4px")
+                .set("justify-content", "flex-end");
+
+        for (UploadedFileData attachment : attachments) {
+            Div attachmentChip = new Div();
+            attachmentChip.getStyle()
+                    .set("background", "#dbeafe")
+                    .set("color", "#1e40af")
+                    .set("padding", "4px 8px")
+                    .set("border-radius", "12px")
+                    .set("font-size", "12px")
+                    .set("display", "flex")
+                    .set("align-items", "center")
+                    .set("gap", "4px")
+                    .set("border", "1px solid #bfdbfe");
+
+            Icon fileIcon = new Icon(VaadinIcon.FILE_PICTURE);
+            fileIcon.setSize("12px");
+            fileIcon.setColor("#1e40af");
+
+            Span fileName = new Span(attachment.getFilename());
+            fileName.getStyle().set("font-size", "11px");
+
+            attachmentChip.add(fileIcon, fileName);
+            attachmentContainer.add(attachmentChip);
+        }
+        messageContent.add(attachmentContainer);
+    }
+
+    // Message bubble
+    Div messageBubble = new Div();
+    messageBubble.getElement().setProperty("innerHTML", formatText(text));
+    messageBubble.getStyle()
+            .set("background", "#2563eb")
+            .set("color", "white")
+            .set("padding", "12px 16px")
+            .set("border-radius", "18px 18px 6px 18px")
+            .set("min-width", "20px")
+            .set("font-size", "16px")
+            .set("font-family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif")
+            .set("line-height", "1.4")
+            .set("word-wrap", "break-word")
+            .set("white-space", "pre-wrap")
+            .set("position", "relative");
+
+    // Edit button (3 dots)
+    Button editButton = new Button();
+    Icon dotsIcon = new Icon(VaadinIcon.ELLIPSIS_DOTS_H);
+    dotsIcon.setSize("14px");
+    dotsIcon.setColor("#9ca3af");
+    editButton.setIcon(dotsIcon);
+    editButton.getStyle()
+            .set("position", "absolute")
+            .set("top", "-8px")
+            .set("right", "-8px")
+            .set("width", "24px")
+            .set("height", "24px")
+            .set("min-width", "24px")
+            .set("background", "white")
+            .set("border", "1px solid #e5e7eb")
+            .set("border-radius", "50%")
+            .set("display", "none")
+            .set("align-items", "center")
+            .set("justify-content", "center")
+            .set("cursor", "pointer")
+            .set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)")
+            .set("z-index", "10");
+
+    editButton.addClickListener(e -> {
+        showNotification("Edit functionality coming soon!", false);
+    });
+
+    messageBubble.add(editButton);
+
+    // Show edit button on hover
+    messageBubble.getElement().addEventListener("mouseenter", e -> {
+        editButton.getStyle().set("display", "flex");
+    });
+
+    messageBubble.getElement().addEventListener("mouseleave", e -> {
+        editButton.getStyle().set("display", "none");
+    });
+
+    messageContent.add(messageBubble);
+    messageRow.add(messageContent, userAvatar);
+    messagesContainer.add(messageRow);
+    messageElements.add(messageRow);
+    currentMessageGroup.add(messageRow);
+    
+    // Show avatar on this message (it's the current last user message)
+    showUserAvatarOnLastMessage();
+}
+
+// Helper method to show user avatar only on the last message
+private void showUserAvatarOnLastMessage() {
+    // Hide all user avatars in current group
+    for (Div messageRow : currentMessageGroup) {
+        messageRow.getChildren()
+                .filter(component -> component instanceof Div)
+                .forEach(component -> {
+                    Div div = (Div) component;
+                    if ("👤".equals(div.getText())) {
+                        div.getStyle().set("display", "none");
+                    }
+                });
+    }
+    
+    // Show avatar only on the last message in the group
+    if (!currentMessageGroup.isEmpty()) {
+        Div lastMessageRow = currentMessageGroup.get(currentMessageGroup.size() - 1);
+        lastMessageRow.getChildren()
+                .filter(component -> component instanceof Div)
+                .forEach(component -> {
+                    Div div = (Div) component;
+                    if ("👤".equals(div.getText())) {
+                        div.getStyle().set("display", "flex");
+                        // Adjust message content margin
+                        lastMessageRow.getChildren()
+                                .filter(comp -> comp instanceof Div && 
+                                       comp != div &&
+                                       ((Div) comp).getStyle().get("flex-direction") != null)
+                                .findFirst()
+                                .ifPresent(content -> ((Div) content).getStyle().set("margin-right", "0"));
+                    }
+                });
+    }
+}
+// Helper method to hide avatars in previous message group
+private void hideAvatarsInPreviousGroup() {
+    // This method ensures that when switching between bot/user messages,
+    // the previous group's avatars are properly managed
+    if ("user".equals(lastMessageSender)) {
+        // We're switching from user to bot, make sure last user message shows avatar
+        showUserAvatarOnLastMessage();
+    }
+    // For bot messages, the avatar visibility is already handled in addBotMessage
+}
+    private void addBotMessage(String text, boolean showAvatar) {
+        // Update message group tracking
+        if (!"bot".equals(lastMessageSender)) {
+            // Starting a new bot message group
+            hideAvatarsInPreviousGroup();
+            currentMessageGroup.clear();
+            lastMessageSender = "bot";
+        }
+
         Div messageRow = new Div();
         messageRow.setWidthFull();
         messageRow.getStyle()
                 .set("display", "flex")
                 .set("justify-content", "flex-start")
-                .set("margin-bottom", "8px")
-                .set("padding", "0 4px");
+                .set("margin-bottom", "12px")
+                .set("padding", "0 4px")
+                .set("position", "relative");
 
+        // Bot avatar - only show if this is the last message in the group
+        Div botAvatar = new Div();
+        botAvatar.setText("🤖");
+        botAvatar.getStyle()
+                .set("width", "24px")
+                .set("height", "24px")
+                .set("border-radius", "50%")
+                .set("background", "#f3f4f6")
+                .set("display", showAvatar ? "flex" : "none") // Hide/show based on parameter
+                .set("align-items", "center")
+                .set("justify-content", "center")
+                .set("font-size", "12px")
+                .set("margin-right", "8px")
+                .set("margin-top", "auto")
+                .set("flex-shrink", "0");
+
+        // Add class for easier identification
+        botAvatar.addClassName("bot-avatar");
+
+        // Message bubble - adjust margin when no avatar
         Div messageBubble = new Div();
         messageBubble.getElement().setProperty("innerHTML", formatText(text));
         messageBubble.getStyle()
@@ -825,11 +994,52 @@ public class ChatView extends VerticalLayout {
                 .set("font-family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif")
                 .set("line-height", "1.4")
                 .set("word-wrap", "break-word")
-                .set("white-space", "pre-wrap");
+                .set("white-space", "pre-wrap")
+                .set("position", "relative")
+                .set("margin-left", showAvatar ? "0" : "32px"); // Add left margin when no avatar
 
-        messageRow.add(messageBubble);
+        // Edit button (3 dots) for bot messages
+        Button editButton = new Button();
+        Icon dotsIcon = new Icon(VaadinIcon.ELLIPSIS_DOTS_H);
+        dotsIcon.setSize("14px");
+        dotsIcon.setColor("#9ca3af");
+        editButton.setIcon(dotsIcon);
+        editButton.getStyle()
+                .set("position", "absolute")
+                .set("top", "-8px")
+                .set("left", "-8px")
+                .set("width", "24px")
+                .set("height", "24px")
+                .set("min-width", "24px")
+                .set("background", "white")
+                .set("border", "1px solid #e5e7eb")
+                .set("border-radius", "50%")
+                .set("display", "none")
+                .set("align-items", "center")
+                .set("justify-content", "center")
+                .set("cursor", "pointer")
+                .set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)")
+                .set("z-index", "10");
+
+        editButton.addClickListener(e -> {
+            showNotification("Bot message options coming soon!", false);
+        });
+
+        messageBubble.add(editButton);
+
+        // Show edit button on hover
+        messageBubble.getElement().addEventListener("mouseenter", e -> {
+            editButton.getStyle().set("display", "flex");
+        });
+
+        messageBubble.getElement().addEventListener("mouseleave", e -> {
+            editButton.getStyle().set("display", "none");
+        });
+
+        messageRow.add(botAvatar, messageBubble);
         messagesContainer.add(messageRow);
         messageElements.add(messageRow);
+        currentMessageGroup.add(messageRow);
     }
 
     private String formatText(String text) {
@@ -837,8 +1047,7 @@ public class ChatView extends VerticalLayout {
             return "";
 
         // Normalize quotes and apostrophes
-        text = text.replace("’", "'").replace("“", "\"").replace("”", "\"");
-
+        text = text.replace("'", "&apos;").replace("\"", "&quot;").replace("\"", "&quot;");
         // Convert **bold** to <strong>
         text = text.replaceAll("\\*\\*(.*?)\\*\\*", "<strong>$1</strong>");
 
@@ -939,10 +1148,8 @@ public class ChatView extends VerticalLayout {
                 }
                 result.append(line).append("\n");
             } else if (inList) {
-                // Skip empty lines inside lists
                 continue;
             } else {
-                // Only add one empty line for paragraph breaks
                 if (result.length() > 0 && !result.toString().endsWith("\n\n")) {
                     result.append("\n");
                 }
@@ -963,8 +1170,24 @@ public class ChatView extends VerticalLayout {
         typingRow.getStyle()
                 .set("display", "flex")
                 .set("justify-content", "flex-start")
-                .set("margin-bottom", "8px")
+                .set("margin-bottom", "12px")
                 .set("padding", "0 4px");
+
+        // Bot avatar for typing indicator
+        Div botAvatar = new Div();
+        botAvatar.setText("🤖");
+        botAvatar.getStyle()
+                .set("width", "24px")
+                .set("height", "24px")
+                .set("border-radius", "50%")
+                .set("background", "#f3f4f6")
+                .set("display", "flex")
+                .set("align-items", "center")
+                .set("justify-content", "center")
+                .set("font-size", "12px")
+                .set("margin-right", "8px")
+                .set("margin-top", "auto")
+                .set("flex-shrink", "0");
 
         Div typingBubble = new Div();
         typingBubble.getStyle()
@@ -987,7 +1210,7 @@ public class ChatView extends VerticalLayout {
             typingBubble.add(dot);
         }
 
-        typingRow.add(typingBubble);
+        typingRow.add(botAvatar, typingBubble);
         messagesContainer.add(typingRow);
         scrollToBottom();
     }
@@ -1007,12 +1230,20 @@ public class ChatView extends VerticalLayout {
         isWaitingForResponse = !enabled;
 
         if (enabled) {
-            sendButton.getStyle().set("opacity", "1");
-            uploadButton.getStyle().set("opacity", "1");
+            sendButton.getStyle()
+                    .set("opacity", "1")
+                    .set("background", "#2563eb");
+            uploadButton.getStyle()
+                    .set("opacity", "1")
+                    .set("background", "#2563eb");
             messageInput.getStyle().set("opacity", "1");
         } else {
-            sendButton.getStyle().set("opacity", "0.6");
-            uploadButton.getStyle().set("opacity", "0.6");
+            sendButton.getStyle()
+                    .set("opacity", "0.6")
+                    .set("background", "#9ca3af");
+            uploadButton.getStyle()
+                    .set("opacity", "0.6")
+                    .set("background", "#9ca3af");
             messageInput.getStyle().set("opacity", "0.8");
         }
     }
@@ -1129,103 +1360,95 @@ public class ChatView extends VerticalLayout {
         getUI().ifPresent(ui -> {
             ui.access(() -> {
                 messageInput.focus();
-                addWelcomeMessage();
+                // Add welcome message after a slight delay to ensure layout is ready
+                ui.getPage().executeJs("setTimeout(() => {}, 50);").then(ignore -> {
+                    addWelcomeMessage();
+                    ui.push();
+                });
             });
 
+            // Split the JavaScript into smaller, manageable parts
             ui.getPage().executeJs(
                     "const style = document.createElement('style');" +
-                            "style.textContent = `" +
+                            "document.head.appendChild(style);");
 
-            // Fix layout for the entire view
-                            "vaadin-vertical-layout[width='100%'] {" +
-                            "  display: flex !important;" +
-                            "  flex-direction: column !important;" +
-                            "  height: 100vh !important;" +
-                            "  overflow: hidden !important;" +
-                            "}" +
+            // Add CSS styles in separate execution
+            ui.getPage().executeJs(
+                    "const styleSheet = document.styleSheets[document.styleSheets.length - 1];" +
+                            "styleSheet.insertRule('vaadin-vertical-layout[width=\"100%\"] { display: flex !important; flex-direction: column !important; height: 100vh !important; overflow: hidden !important; min-width: 0 !important; }');"
+                            +
+                            "styleSheet.insertRule('vaadin-scroller { flex: 1 1 auto !important; min-height: 0 !important; height: 100% !important; overflow-y: auto !important; overflow-x: hidden !important; min-width: 0 !important; }');"
+                            +
+                            "styleSheet.insertRule('vaadin-scroller::-webkit-scrollbar { width: 0 !important; background: transparent !important; }');"
+                            +
+                            "styleSheet.insertRule('vaadin-scroller { -ms-overflow-style: none !important; scrollbar-width: none !important; }');");
 
-            // Ensure messages container scrolls properly
-                            "vaadin-scroller {" +
-                            "  flex: 1 1 auto !important;" +
-                            "  min-height: 0 !important;" +
-                            "  height: 100% !important;" +
-                            "  overflow-y: auto !important;" +
-                            "  overflow-x: hidden !important;" +
-                            "}" +
+            ui.getPage().executeJs(
+                    "const styleSheet = document.styleSheets[document.styleSheets.length - 1];" +
+                            "styleSheet.insertRule('vaadin-text-area::part(input-field) { background: transparent !important; border: none !important; box-shadow: none !important; overflow: hidden !important; min-width: 0 !important; }');"
+                            +
+                            "styleSheet.insertRule('vaadin-text-area[focus-ring]::part(input-field) { box-shadow: none !important; }');"
+                            +
+                            "styleSheet.insertRule('vaadin-text-area textarea { overflow-y: auto !important; overflow-x: hidden !important; resize: none !important; scrollbar-width: thin !important; min-width: 0 !important; word-wrap: break-word !important; white-space: pre-wrap !important; }');");
 
-            // Hide scrollbars completely
-                            "vaadin-scroller::-webkit-scrollbar {" +
-                            "  width: 0 !important;" +
-                            "  background: transparent !important;" +
-                            "}" +
+            ui.getPage().executeJs(
+                    "const styleSheet = document.styleSheets[document.styleSheets.length - 1];" +
+                            "styleSheet.insertRule('vaadin-text-area textarea::-webkit-scrollbar { width: 4px !important; }');"
+                            +
+                            "styleSheet.insertRule('vaadin-text-area textarea::-webkit-scrollbar-track { background: transparent !important; }');"
+                            +
+                            "styleSheet.insertRule('vaadin-text-area textarea::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2) !important; border-radius: 4px !important; }');"
+                            +
+                            "styleSheet.insertRule('div[style*=\"word-wrap: break-word\"] { overflow-wrap: break-word !important; word-break: break-word !important; hyphens: auto !important; max-width: 100% !important; }');");
 
-                            "vaadin-scroller {" +
-                            "  -ms-overflow-style: none !important;" +
-                            "  scrollbar-width: none !important;" +
-                            "}" +
+            // Add keyframe animation
+            ui.getPage().executeJs(
+                    "const styleSheet = document.styleSheets[document.styleSheets.length - 1];" +
+                            "styleSheet.insertRule('@keyframes typingDot { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-10px); } }');");
 
-            // Fix text area styling - PREVENT DOUBLE SCROLLBARS
-                            "vaadin-text-area::part(input-field) {" +
-                            "  background: transparent !important;" +
-                            "  border: none !important;" +
-                            "  box-shadow: none !important;" +
-                            "  overflow: hidden !important;" + // KEY FIX: Prevent scrollbar on container
-                            "}" +
-
-                            "vaadin-text-area[focus-ring]::part(input-field) {" +
-                            "  box-shadow: none !important;" +
-                            "}" +
-
-            // Style the actual textarea to handle scrolling properly
-                            "vaadin-text-area textarea {" +
-                            "  overflow-y: auto !important;" +
-                            "  overflow-x: hidden !important;" +
-                            "  resize: none !important;" +
-                            "  scrollbar-width: thin !important;" + // Make scrollbar thinner
-                            "}" +
-
-            // Optional: Hide textarea scrollbar on webkit browsers
-                            "vaadin-text-area textarea::-webkit-scrollbar {" +
-                            "  width: 4px !important;" +
-                            "}" +
-
-                            "vaadin-text-area textarea::-webkit-scrollbar-track {" +
-                            "  background: transparent !important;" +
-                            "}" +
-
-                            "vaadin-text-area textarea::-webkit-scrollbar-thumb {" +
-                            "  background: rgba(0,0,0,0.2) !important;" +
-                            "  border-radius: 4px !important;" +
-                            "}" +
-
-                            "`;" +
-                            "document.head.appendChild(style);" +
-
-            // Enhanced textarea auto-resize logic
-                            "const textarea = document.querySelector('vaadin-text-area textarea');" +
-                            "if (textarea) {" +
-                            "  const minHeight = 44;" + // Your minimum height
-                            "  const maxHeight = 120;" + // Your maximum height
-                            "  " +
-                            "  function resizeTextarea() {" +
-                            "    textarea.style.height = minHeight + 'px';" + // Reset to min height
-                            "    const scrollHeight = textarea.scrollHeight;" +
+            // Add textarea functionality
+            ui.getPage().executeJs(
+                    "setTimeout(() => {" +
+                            "  const textarea = document.querySelector('vaadin-text-area textarea');" +
+                            "  if (textarea) {" +
+                            "    const minHeight = 44;" +
+                            "    const maxHeight = 120;" +
                             "    " +
-                            "    if (scrollHeight <= maxHeight) {" +
-                            "      textarea.style.height = scrollHeight + 'px';" +
-                            "      textarea.style.overflowY = 'hidden';" + // Hide scrollbar when not needed
-                            "    } else {" +
-                            "      textarea.style.height = maxHeight + 'px';" +
-                            "      textarea.style.overflowY = 'auto';" + // Show scrollbar only when needed
+                            "    function resizeTextarea() {" +
+                            "      textarea.style.height = minHeight + 'px';" +
+                            "      const scrollHeight = textarea.scrollHeight;" +
+                            "      " +
+                            "      if (scrollHeight <= maxHeight) {" +
+                            "        textarea.style.height = scrollHeight + 'px';" +
+                            "        textarea.style.overflowY = 'hidden';" +
+                            "      } else {" +
+                            "        textarea.style.height = maxHeight + 'px';" +
+                            "        textarea.style.overflowY = 'auto';" +
+                            "      }" +
                             "    }" +
+                            "    " +
+                            "    textarea.addEventListener('input', resizeTextarea);" +
+                            "    textarea.addEventListener('focus', resizeTextarea);" +
+                            "    textarea.addEventListener('blur', resizeTextarea);" +
+                            "    " +
+                            "    textarea.addEventListener('keydown', function(e) {" +
+                            "      if (e.key === 'Enter' && !e.shiftKey) {" +
+                            "        e.preventDefault();" +
+                            "        const event = new KeyboardEvent('keydown', {" +
+                            "          key: 'Enter'," +
+                            "          keyCode: 13," +
+                            "          which: 13," +
+                            "          shiftKey: false," +
+                            "          bubbles: true" +
+                            "        });" +
+                            "        textarea.dispatchEvent(event);" +
+                            "        return false;" +
+                            "      }" +
+                            "    });" +
+                            "    " +
+                            "    resizeTextarea();" +
                             "  }" +
-                            "  " +
-                            "  textarea.addEventListener('input', resizeTextarea);" +
-                            "  textarea.addEventListener('focus', resizeTextarea);" +
-                            "  textarea.addEventListener('blur', resizeTextarea);" +
-                            "  " +
-                            "  resizeTextarea();" +
-                            "}");
+                            "}, 100);");
         });
     }
 
@@ -1257,4 +1480,40 @@ public class ChatView extends VerticalLayout {
         }
     }
 
+    // Add these fields to ChatView class
+    private List<ConversationMessage> conversationHistory = new ArrayList<>();
+
+
+    // Add this inner class
+    private static class ConversationMessage {
+        public String role; // "user" or "bot"
+        public String content;
+        public long timestamp;
+
+        public ConversationMessage(String role, String content) {
+            this.role = role;
+            this.content = content;
+            this.timestamp = System.currentTimeMillis();
+        }
+
+        public String getRole() {
+            return role;
+        }
+
+        public String getContent() {
+            return content;
+        }
+
+        public long getTimestamp() {
+            return timestamp;
+        }
+
+        @Override
+        public String toString() {
+            return "ConversationMessage{" +
+                    "role='" + role + '\'' +
+                    ", content='" + content + '\'' +
+                    '}';
+        }
+    }
 }
