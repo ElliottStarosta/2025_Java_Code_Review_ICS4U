@@ -59,4 +59,16 @@ public class AnimalProfile {
     
     public String getSymptoms() { return symptoms; }
     public void setSymptoms(String symptoms) { this.symptoms = symptoms; }
+
+    @Override
+    public String toString() {
+        return "AnimalProfile{" +
+                "id=" + id +
+                ", animalType='" + animalType + '\'' +
+                ", breed='" + breed + '\'' +
+                ", age=" + age +
+                ", weight=" + weight +
+                ", symptoms='" + symptoms + '\'' +
+                '}';
+    }
 }

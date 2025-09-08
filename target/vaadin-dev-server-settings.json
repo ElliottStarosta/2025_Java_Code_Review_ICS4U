@@ -1,0 +1,17 @@
+{
+  "frontendFolder": "C:/Users/starl/Documents/GitHub/connections/vetbot/./frontend",
+  "themeFolder": "themes",
+  "themeResourceFolder": "C:/Users/starl/Documents/GitHub/connections/vetbot/./frontend/generated/jar-resources",
+  "staticOutput": "C:/Users/starl/Documents/GitHub/connections/vetbot/target/classes/META-INF/VAADIN/webapp/VAADIN/static",
+  "generatedFolder": "generated",
+  "statsOutput": "C:\\Users\\starl\\Documents\\GitHub\\connections\\vetbot\\target\\classes\\META-INF\\VAADIN\\config",
+  "frontendBundleOutput": "C:\\Users\\starl\\Documents\\GitHub\\connections\\vetbot\\target\\classes\\META-INF\\VAADIN\\webapp",
+  "devBundleOutput": "C:/Users/starl/Documents/GitHub/connections/vetbot/src/main/dev-bundle/webapp",
+  "devBundleStatsOutput": "C:/Users/starl/Documents/GitHub/connections/vetbot/src/main/dev-bundle/config",
+  "jarResourcesFolder": "C:/Users/starl/Documents/GitHub/connections/vetbot/./frontend/generated/jar-resources",
+  "themeName": "",
+  "clientServiceWorkerSource": "C:\\Users\\starl\\Documents\\GitHub\\connections\\vetbot\\target\\sw.ts",
+  "pwaEnabled": false,
+  "offlineEnabled": false,
+  "offlinePath": "'offline.html'"
+}

@@ -5,6 +5,8 @@ import com.virtualvet.entity.*;
 import com.virtualvet.enums.entity.MessageType;
 import com.virtualvet.enums.model.UrgencyLevel;
 import com.virtualvet.config.AIServiceConfig;
+import com.virtualvet.dto.StructuredVetResponse;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -28,52 +30,70 @@ public class AIConversationService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final String SYSTEM_PROMPT = "You are a professional virtual veterinary assistant. Your role is to:\n"
-            +
-            "1. Help pet owners assess their animal's health concerns\n" +
-            "2. Provide general veterinary guidance and education\n" +
-            "3. Determine urgency levels for veterinary care\n" +
-            "4. Offer first aid and care recommendations\n" +
-            "5. Know when to recommend immediate emergency care\n" +
-            "6. Always try to comfort the pet owner and show empathy\n\n" +
+        + "1. Help pet owners assess their animal's health concerns\n"
+        + "2. Provide general veterinary guidance and education\n"
+        + "3. Determine urgency levels for veterinary care\n"
+        + "4. Offer first aid and care recommendations\n"
+        + "5. Know when to recommend immediate emergency care\n"
+        + "6. Always try to comfort the pet owner and show empathy\n\n"
+        + "7. If the user's question is resolved and they indicate no further issues, politely end the conversation.\n\n"
 
-            "CRITICAL RESPONSE FORMATTING RULES:\n" +
-            "- DO NOT include <think> tags or any internal reasoning in your response\n" +
-            "- Respond DIRECTLY to the pet owner with your assessment and advice\n" +
-            "- You MAY use **bold text** for emphasis when appropriate\n" +
-            "- You MAY use newlines (\\n) for paragraph breaks and formatting\n" +
-            "- If you need to create numbered lists, wrap them in <list> tags like this:\n" +
-            "  <list>\n" +
-            "  1. First item\n" +
-            "  2. Second item\n" +
-            "  3. Third item\n" +
-            "  </list>\n" +
-            "- DO NOT MAKE BULLET POINTS ONLY MAKE NUMBERED LISTS\n" +
+        + "CRITICAL MEMORY INSTRUCTIONS:\n"
+        + "- ALWAYS read and remember the CONVERSATION CONTEXT provided below\n"
+        + "- Remember the pet's name, medications given, symptoms discussed, and all previous details\n" 
+        + "- Reference previous conversation when relevant (e.g., 'As we discussed about Bill earlier...')\n"
+        + "- If asked about information shared earlier, recall it from the context\n"
+        + "- Build upon previous discussions rather than starting fresh each time\n\n"
 
-            "MULTI-PART RESPONSES:\n" +
-            "- For longer responses, break your answer into logical parts (2-4 parts maximum)\n" +
-            "- Each part should be a complete thought or section (e.g., initial assessment, questions to ask, immediate care steps, when to seek help)\n"
-            +
-            "- Separate each part with exactly this marker: |||SPLIT|||\n" +
-            "- Example format:\n" +
-            "  First part of your response here...\n" +
-            "  |||SPLIT|||\n" +
-            "  Second part of your response here...\n" +
-            "  |||SPLIT|||\n" +
-            "  Third part of your response here...\n" +
-            "- Do NOT use the split marker for short responses (under 200 words)\n" +
-            "- Only split when it makes the response more readable and digestible\n\n" +
+        + "CRITICAL: You MUST respond with ONLY a valid JSON object. No other text before or after.\n\n"
 
-            "Guidelines:\n" +
-            "- Always be empathetic and professional\n" +
-            "- Ask relevant follow-up questions to better assess the situation\n" +
-            "- Never provide definitive diagnoses - only suggest possibilities\n" +
-            "- Always recommend professional veterinary care for serious concerns\n" +
-            "- Provide practical, actionable advice when appropriate\n" +
-            "- Be clear about limitations of remote assessment\n" +
-            "- Use clear, non-technical language that pet owners can understand\n" +
-            "- Show concern for both the pet's welfare and the owner's emotional state\n" +
-            "- Provide specific next steps when possible\n" +
-            "- Include timeframes for when to seek care (immediate, within hours, within days)\n";
+        + "REQUIRED JSON STRUCTURE:\n"
+        + "{\n"
+        + "  \"urgency\": \"LOW|MEDIUM|HIGH|CRITICAL\",\n"
+        + "  \"assessment\": \"Brief professional assessment of the situation\",\n"
+        + "  \"messageSegments\": [\n"
+        + "    {\n"
+        + "      \"type\": \"greeting|assessment|advice|emergency|warning|question\",\n"
+        + "      \"content\": \"Message text here\",\n"
+        + "      \"emphasis\": \"normal|bold|urgent\",\n"
+        + "      \"delay\": 800\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"structuredContent\": {\n"
+        + "    \"lists\": [\n"
+        + "      {\n"
+        + "        \"title\": \"Optional list title\",\n"
+        + "        \"type\": \"bullet|numbered\",\n"
+        + "        \"items\": [\"Item 1\", \"Item 2\"]\n"
+        + "      }\n"
+        + "    ],\n"
+        + "    \"warnings\": [\"Important warning text\"],\n"
+        + "    \"recommendations\": [\n"
+        + "      {\n"
+        + "        \"action\": \"Specific action to take\",\n"
+        + "        \"timeframe\": \"immediate|hours|24h|days|monitor\",\n"
+        + "        \"priority\": \"high|medium|low\"\n"
+        + "      }\n"
+        + "    ],\n"
+        + "    \"followUpQuestions\": [\"Question 1?\", \"Question 2?\"]\n"
+        + "  },\n"
+        + "  \"nextSteps\": \"Clear next step instruction\",\n"
+        + "  \"vetContactAdvice\": {\n"
+        + "    \"recommended\": true,\n"
+        + "    \"timeframe\": \"immediate|today|within_24h|within_week|routine\",\n"
+        + "    \"reason\": \"Reason for vet contact\"\n"
+        + "  }\n"
+        + "}\n\n"
+
+        + "RESPONSE RULES:\n"
+        + "- Respond with ONLY the JSON object, no additional text\n"
+        + "- Use 2-4 messageSegments for natural conversation flow\n"
+        + "- Include relevant lists in structuredContent when appropriate\n"
+        + "- Set delay between 300-1200ms for message segments\n"
+        + "- Always include nextSteps and vetContactAdvice\n"
+        + "- Use proper JSON escaping for quotes and special characters\n"
+        + "- Be empathetic, professional, and clear\n"
+        + "- REFERENCE PREVIOUS CONVERSATION WHEN RELEVANT\n\n";
 
     public String generateResponse(String userMessage, ConversationContext context,
             List<AnalysisResult> imageAnalyses) {
@@ -149,10 +169,198 @@ public class AIConversationService {
         }
     }
 
+    private String extractJsonFromResponse(String rawResponse) {
+        if (rawResponse == null || rawResponse.trim().isEmpty()) {
+            return "{}";
+        }
+
+        // Remove thinking tags
+        String cleaned = rawResponse.replaceAll("(?s)<think>.*?</think>", "").trim();
+
+        // Look for JSON object boundaries
+        int jsonStart = cleaned.indexOf('{');
+        int jsonEnd = cleaned.lastIndexOf('}');
+
+        if (jsonStart >= 0 && jsonEnd > jsonStart) {
+            return cleaned.substring(jsonStart, jsonEnd + 1);
+        }
+
+        // If no valid JSON found, return empty object
+        return "{}";
+    }
+
+    private StructuredVetResponse parseStructuredResponse(String rawResponse) {
+        try {
+            String jsonResponse = extractJsonFromResponse(rawResponse);
+
+            // Parse the new structured format
+            JsonNode rootNode = objectMapper.readTree(jsonResponse);
+
+            StructuredVetResponse response = new StructuredVetResponse();
+            response.setUrgency(rootNode.path("urgency").asText("MEDIUM"));
+            response.setAssessment(rootNode.path("assessment").asText(""));
+
+            // Parse messageSegments
+            JsonNode messageSegments = rootNode.path("messageSegments");
+            if (messageSegments.isArray()) {
+                for (JsonNode segment : messageSegments) {
+                    StructuredVetResponse.ResponseMessage message = new StructuredVetResponse.ResponseMessage();
+                    message.setType(segment.path("type").asText("assessment"));
+                    message.setContent(segment.path("content").asText(""));
+                    message.setEmphasis(segment.path("emphasis").asText("normal"));
+                    message.setDelay(segment.path("delay").asInt(800));
+                    response.getMessages().add(message);
+                }
+            }
+
+            // Parse structuredContent
+            JsonNode structuredContent = rootNode.path("structuredContent");
+
+            // Parse lists
+            JsonNode lists = structuredContent.path("lists");
+            if (lists.isArray()) {
+                for (JsonNode listNode : lists) {
+                    StructuredVetResponse.ResponseList list = new StructuredVetResponse.ResponseList();
+                    list.setTitle(listNode.path("title").asText(""));
+                    list.setType(listNode.path("type").asText("bullet"));
+
+                    JsonNode items = listNode.path("items");
+                    if (items.isArray()) {
+                        for (JsonNode item : items) {
+                            list.getItems().add(item.asText());
+                        }
+                    }
+                    response.getLists().add(list);
+                }
+            }
+
+            // Parse warnings
+            JsonNode warnings = structuredContent.path("warnings");
+            if (warnings.isArray()) {
+                for (JsonNode warning : warnings) {
+                    response.getWarnings().add(warning.asText());
+                }
+            }
+
+            // Parse recommendations
+            JsonNode recommendations = structuredContent.path("recommendations");
+            if (recommendations.isArray()) {
+                for (JsonNode recNode : recommendations) {
+                    StructuredVetResponse.Recommendation rec = new StructuredVetResponse.Recommendation();
+                    rec.setAction(recNode.path("action").asText(""));
+                    rec.setTimeframe(recNode.path("timeframe").asText("monitor"));
+                    rec.setPriority(recNode.path("priority").asText("medium"));
+                    response.getRecommendations().add(rec);
+                }
+            }
+
+            // Parse follow-up questions
+            JsonNode followUpQuestions = structuredContent.path("followUpQuestions");
+            if (followUpQuestions.isArray()) {
+                for (JsonNode question : followUpQuestions) {
+                    response.getQuestions().add(question.asText());
+                }
+            }
+
+            response.setNextSteps(rootNode.path("nextSteps").asText(""));
+
+            // Parse vet contact advice
+            JsonNode vetContactAdvice = rootNode.path("vetContactAdvice");
+            response.setVetContactRecommended(vetContactAdvice.path("recommended").asBoolean(false));
+            response.setVetContactTimeframe(vetContactAdvice.path("timeframe").asText("routine"));
+            response.setVetContactReason(vetContactAdvice.path("reason").asText(""));
+
+            return response;
+
+        } catch (Exception e) {
+            System.err.println("Failed to parse structured response: " + e.getMessage());
+            return generateFallbackStructuredResponse("", null, null);
+        }
+    }
+
+    private StructuredVetResponse generateFallbackStructuredResponse(String userMessage, ConversationContext context,
+            List<AnalysisResult> imageAnalyses) {
+        StructuredVetResponse response = new StructuredVetResponse();
+
+        // Determine urgency from keywords
+        String lowerMessage = userMessage.toLowerCase();
+        if (containsEmergencyKeywords(lowerMessage)) {
+            response.setUrgency("CRITICAL");
+            response.setAssessment("Emergency situation detected based on your description");
+
+            StructuredVetResponse.ResponseMessage emergencyMsg = new StructuredVetResponse.ResponseMessage();
+            emergencyMsg.setType("emergency");
+            emergencyMsg.setContent(
+                    "Based on what you've described, this sounds like it could be a serious emergency. Please contact your veterinarian immediately or visit the nearest emergency animal clinic.");
+            emergencyMsg.setEmphasis("urgent");
+            response.getMessages().add(emergencyMsg);
+
+            response.getWarnings().add("Time is critical in emergency situations");
+            response.setNextSteps("Contact emergency veterinary services immediately");
+
+        } else if (lowerMessage.contains("vomiting")) {
+            response.setUrgency("MEDIUM");
+            response.setAssessment("Vomiting episode requiring monitoring");
+
+            StructuredVetResponse.ResponseMessage assessmentMsg = new StructuredVetResponse.ResponseMessage();
+            assessmentMsg.setType("assessment");
+            assessmentMsg.setContent(
+                    "Vomiting can have many causes in pets, ranging from dietary indiscretion to more serious conditions.");
+            assessmentMsg.setEmphasis("normal");
+            response.getMessages().add(assessmentMsg);
+
+            // Add immediate care steps
+            StructuredVetResponse.ResponseList careSteps = new StructuredVetResponse.ResponseList();
+            careSteps.setTitle("Immediate Care Steps");
+            careSteps.setType("numbered");
+            careSteps.getItems().add("Withhold food for 12 hours but provide small amounts of water");
+            careSteps.getItems().add("Monitor for other symptoms like lethargy, blood, or continued vomiting");
+            careSteps.getItems().add("Contact your vet if vomiting continues or worsens");
+            response.getLists().add(careSteps);
+
+            response.getQuestions().add("How long has the vomiting been going on?");
+            response.getQuestions().add("Have you noticed any other symptoms?");
+            response.setNextSteps("Monitor closely and contact vet if symptoms persist or worsen");
+
+        } else {
+            response.setUrgency("LOW");
+            response.setAssessment("General health inquiry");
+
+            StructuredVetResponse.ResponseMessage greetingMsg = new StructuredVetResponse.ResponseMessage();
+            greetingMsg.setType("greeting");
+            greetingMsg.setContent(
+                    "Thank you for sharing your concerns about your pet. I'm here to help assess the situation and provide guidance.");
+            greetingMsg.setEmphasis("normal");
+            response.getMessages().add(greetingMsg);
+
+            response.getQuestions().add("Can you describe the specific symptoms you've observed?");
+            response.getQuestions().add("When did these symptoms first start?");
+            response.setNextSteps("Please provide more details so I can give you targeted advice");
+        }
+
+        return response;
+    }
+
+    public StructuredVetResponse generateStructuredResponse(String userMessage, ConversationContext context,
+            List<AnalysisResult> imageAnalyses) {
+        try {
+            String contextPrompt = buildContextPrompt(context, imageAnalyses);
+            String fullPrompt = SYSTEM_PROMPT + "\n\n" + contextPrompt + "\n\nUser: " + userMessage;
+
+            String rawResponse = callHackClubAPI(fullPrompt);
+            return parseStructuredResponse(rawResponse);
+
+        } catch (Exception e) {
+            System.err.println("AI service error: " + e.getMessage());
+            return generateFallbackStructuredResponse(userMessage, context, imageAnalyses);
+        }
+    }
+
     public String buildContextPrompt(ConversationContext context, List<AnalysisResult> imageAnalyses) {
         StringBuilder contextBuilder = new StringBuilder();
 
         contextBuilder.append("CONVERSATION CONTEXT:\n");
+        System.out.println("Building context prompt with conversation context: " + context.getAnimalProfile());
 
         // Animal profile information
         if (context.getAnimalProfile() != null) {
@@ -209,10 +417,11 @@ public class AIConversationService {
 
         // Recent conversation history
         if (!context.getRecentHistory().isEmpty()) {
-            contextBuilder.append("\nRecent Conversation (last 5 messages):\n");
-            List<Message> recentMessages = context.getRecentHistory().stream()
-                    .limit(5)
-                    .collect(Collectors.toList());
+            contextBuilder.append("\nRecent Conversation:\n");
+            List<Message> recentMessages = context.getRecentHistory();
+            System.out.println("Recent messages: " + recentMessages.stream()
+                    .map(msg -> msg.getMessageType() + ": " + msg.getContent())
+                    .collect(Collectors.joining(" | ")));
 
             for (Message msg : recentMessages) {
                 String role = msg.getMessageType() == MessageType.USER ? "Owner" : "Vet Assistant";
@@ -307,7 +516,6 @@ public class AIConversationService {
         }
         return generateFallbackResponse(userMessage, context, imageAnalyses);
     }
-
 
     private boolean containsEmergencyKeywords(String message) {
         List<String> emergencyKeywords = Arrays.asList(

@@ -59,6 +59,10 @@ public class ChatService {
         try {
             Conversation conversation = getOrCreateConversation(sessionId);
             conversation.updateLastActivity();
+
+            // Build context BEFORE processing the message to get full conversation history
+            ConversationContext context = buildConversationContext(sessionId);
+
             conversationRepository.save(conversation);
 
             Message userMessage = saveMessage(sessionId, message, MessageType.USER);
@@ -72,8 +76,6 @@ public class ChatService {
                         imageAnalyses.add(imageAnalysis);
 
                         String imageUrl = imageAnalysisService.saveImage(image, sessionId);
-                        // For multiple images, you might want to store them differently
-                        // or update your Message entity to support multiple image URLs
                         if (userMessage.getImageUrl() == null) {
                             userMessage.setImageUrl(imageUrl);
                         } else {
@@ -84,7 +86,6 @@ public class ChatService {
                 messageRepository.save(userMessage);
             }
 
-            ConversationContext context = buildConversationContext(sessionId);
             UrgencyLevel messageUrgency = analyzeMessageUrgency(message);
 
             if (messageUrgency.ordinal() > context.getCurrentUrgency().ordinal()) {
@@ -99,18 +100,31 @@ public class ChatService {
                 }
             }
 
-            // Generate AI response with multiple image analyses
-            String aiResponse = aiConversationService.generateResponse(message, context, imageAnalyses);
+            // Extract and add new symptoms from current message
+            List<String> newSymptoms = aiConversationService.extractSymptomsFromText(message);
+            context.addSymptoms(newSymptoms);
 
-            UrgencyLevel urgency = context.getCurrentUrgency();
+            // Generate structured AI response with full context
+            StructuredVetResponse structuredResponse = aiConversationService.generateStructuredResponse(message,
+                    context, imageAnalyses);
+
+            // Update conversation urgency level
+            UrgencyLevel urgency = UrgencyLevel.valueOf(structuredResponse.getUrgency());
+            conversation.setLastUrgencyLevel(urgency);
+            conversationRepository.save(conversation);
+
+            // Convert structured response to display format
+            String displayResponse = convertStructuredResponseToDisplay(structuredResponse);
+
             updateAnimalProfileFromConversation(sessionId, message, context);
 
-            Message botMessage = saveMessage(sessionId, aiResponse, MessageType.BOT);
+            Message botMessage = saveMessage(sessionId, displayResponse, MessageType.BOT);
             botMessage.setUrgencyLevel(urgency.name());
             messageRepository.save(botMessage);
 
-            ChatResponse response = new ChatResponse(aiResponse);
+            ChatResponse response = new ChatResponse(displayResponse);
             response.setUrgencyLevel(urgency);
+            response.setStructuredData(structuredResponse);
             response.setRecommendations(generateRecommendations(urgency, context, imageAnalyses));
 
             if (urgency.isEmergency()) {
@@ -127,6 +141,80 @@ public class ChatService {
         } catch (Exception e) {
             return ChatResponse.error("Failed to process message: " + e.getMessage());
         }
+    }
+
+    private String convertStructuredResponseToDisplay(StructuredVetResponse structuredResponse) {
+        StringBuilder displayText = new StringBuilder();
+
+        // Add message segments with split markers
+        List<StructuredVetResponse.ResponseMessage> messages = structuredResponse.getMessages();
+        for (int i = 0; i < messages.size(); i++) {
+            StructuredVetResponse.ResponseMessage msg = messages.get(i);
+
+            String content = msg.getContent();
+            if ("urgent".equals(msg.getEmphasis()) || "bold".equals(msg.getEmphasis())) {
+                content = "**" + content + "**";
+            }
+
+            displayText.append(content);
+
+            // Add split marker between message segments (except last one)
+            if (i < messages.size() - 1) {
+                displayText.append("|||SPLIT|||");
+            }
+        }
+
+        // Add structured content as separate messages if present
+        if (!structuredResponse.getLists().isEmpty() ||
+                !structuredResponse.getWarnings().isEmpty() ||
+                !structuredResponse.getQuestions().isEmpty()) {
+
+            displayText.append("|||SPLIT|||");
+
+            // Add lists
+            for (StructuredVetResponse.ResponseList list : structuredResponse.getLists()) {
+                if (list.getTitle() != null && !list.getTitle().isEmpty()) {
+                    displayText.append("**").append(list.getTitle()).append("**\n");
+                }
+
+                if ("numbered".equals(list.getType())) {
+                    for (int i = 0; i < list.getItems().size(); i++) {
+                        displayText.append((i + 1)).append(". ").append(list.getItems().get(i)).append("\n");
+                    }
+                } else {
+                    for (String item : list.getItems()) {
+                        displayText.append("• ").append(item).append("\n");
+                    }
+                }
+                displayText.append("\n");
+            }
+
+            // Add warnings
+            if (!structuredResponse.getWarnings().isEmpty()) {
+                displayText.append("**⚠️ Important:**\n");
+                for (String warning : structuredResponse.getWarnings()) {
+                    displayText.append("• ").append(warning).append("\n");
+                }
+                displayText.append("\n");
+            }
+
+            // Add questions
+            if (!structuredResponse.getQuestions().isEmpty()) {
+                displayText.append("**Questions to help assess further:**\n");
+                for (String question : structuredResponse.getQuestions()) {
+                    displayText.append("• ").append(question).append("\n");
+                }
+                displayText.append("\n");
+            }
+        }
+
+        // Add next steps as final message if present
+        if (structuredResponse.getNextSteps() != null && !structuredResponse.getNextSteps().isEmpty()) {
+            displayText.append("|||SPLIT|||");
+            displayText.append("**Next Steps:** ").append(structuredResponse.getNextSteps());
+        }
+
+        return displayText.toString().trim();
     }
 
     public ConversationHistoryResponse getConversationHistory(String sessionId) {
@@ -180,7 +268,7 @@ public class ChatService {
                 });
     }
 
-    private ConversationContext buildConversationContext(String sessionId) {
+    public ConversationContext buildConversationContext(String sessionId) {
         ConversationContext context = new ConversationContext(sessionId);
 
         // Get conversation
@@ -195,21 +283,38 @@ public class ChatService {
             context.setCurrentUrgency(conversation.getLastUrgencyLevel());
         }
 
-        // Get recent messages (last 10)
-        List<Message> recentMessages = messageRepository.findRecentMessagesByConversationId(
-                conversation.getId(), 10);
-        context.setRecentHistory(recentMessages);
+        // Get ALL messages, not just recent ones
+        // This ensures the AI remembers the entire conversation
+        List<Message> allMessages = messageRepository.findByConversationIdOrderByTimestampAsc(conversation.getId());
+        context.setRecentHistory(allMessages); // Pass all messages, not limited to 10
 
         // Get animal profile
         List<AnimalProfile> profiles = animalProfileRepository.findByConversationId(conversation.getId());
         if (!profiles.isEmpty()) {
             context.setAnimalProfile(profiles.get(0));
+            System.out.println("Animal Profile: " + profiles.get(0));
 
             // Parse symptoms from profile
             String symptoms = profiles.get(0).getSymptoms();
             if (symptoms != null && !symptoms.trim().isEmpty()) {
                 context.setIdentifiedSymptoms(Arrays.asList(symptoms.split(",\\s*")));
             }
+        }
+
+        // Accumulate symptoms from ALL messages in conversation
+        Set<String> accumulatedSymptoms = new HashSet<>();
+        for (Message message : allMessages) {
+            if (message.getMessageType() == MessageType.USER) {
+                List<String> messageSymptoms = aiConversationService.extractSymptomsFromText(message.getContent());
+                accumulatedSymptoms.addAll(messageSymptoms);
+            }
+        }
+
+        // Add accumulated symptoms to context
+        if (!accumulatedSymptoms.isEmpty()) {
+            List<String> currentSymptoms = new ArrayList<>(context.getIdentifiedSymptoms());
+            currentSymptoms.addAll(accumulatedSymptoms);
+            context.setIdentifiedSymptoms(currentSymptoms);
         }
 
         return context;
@@ -258,28 +363,28 @@ public class ChatService {
     }
 
     private List<String> generateRecommendations(UrgencyLevel urgency, ConversationContext context,
-        List<AnalysisResult> imageAnalyses) {
-    List<String> recommendations = new ArrayList<>();
-    
-    recommendations.add(urgency.getRecommendation());
+            List<AnalysisResult> imageAnalyses) {
+        List<String> recommendations = new ArrayList<>();
 
-    if (context.getIdentifiedSymptoms().contains("vomiting")) {
-        recommendations.add("Withhold food for 12 hours, provide small amounts of water");
-    }
+        recommendations.add(urgency.getRecommendation());
 
-    if (context.getIdentifiedSymptoms().contains("limping")) {
-        recommendations.add("Limit physical activity and observe for swelling");
-    }
-
-    // Add recommendations from all image analyses
-    for (AnalysisResult imageAnalysis : imageAnalyses) {
-        if (imageAnalysis != null && imageAnalysis.getConfidence() > 0.7) {
-            recommendations.add("Image analysis suggests: " + imageAnalysis.getDescription());
+        if (context.getIdentifiedSymptoms().contains("vomiting")) {
+            recommendations.add("Withhold food for 12 hours, provide small amounts of water");
         }
-    }
 
-    return recommendations;
-}
+        if (context.getIdentifiedSymptoms().contains("limping")) {
+            recommendations.add("Limit physical activity and observe for swelling");
+        }
+
+        // Add recommendations from all image analyses
+        for (AnalysisResult imageAnalysis : imageAnalyses) {
+            if (imageAnalysis != null && imageAnalysis.getConfidence() > 0.7) {
+                recommendations.add("Image analysis suggests: " + imageAnalysis.getDescription());
+            }
+        }
+
+        return recommendations;
+    }
 
     private MessageDto convertToMessageDto(Message message) {
         MessageDto dto = new MessageDto();
