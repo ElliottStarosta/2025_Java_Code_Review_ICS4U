@@ -1,4 +1,0 @@
-model_cache/models--Salesforce--blip-vqa-base/snapshots/787b3d35d57e49572baabd22884b3d5a05acf072/model.safetensors filter=lfs diff=lfs merge=lfs -text
-model_cache/**/*.safetensors filter=lfs diff=lfs merge=lfs -text
-model_cache/**/*.bin filter=lfs diff=lfs merge=lfs -text
-model_cache/**/*.h5 filter=lfs diff=lfs merge=lfs -text
