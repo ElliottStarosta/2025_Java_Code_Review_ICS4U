@@ -30,70 +30,81 @@ public class AIConversationService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final String SYSTEM_PROMPT = "You are a professional virtual veterinary assistant. Your role is to:\n"
-        + "1. Help pet owners assess their animal's health concerns\n"
-        + "2. Provide general veterinary guidance and education\n"
-        + "3. Determine urgency levels for veterinary care\n"
-        + "4. Offer first aid and care recommendations\n"
-        + "5. Know when to recommend immediate emergency care\n"
-        + "6. Always try to comfort the pet owner and show empathy\n\n"
-        + "7. If the user's question is resolved and they indicate no further issues, politely end the conversation.\n\n"
+            + "1. Help pet owners assess their animal's health concerns\n"
+            + "2. Provide general veterinary guidance and education\n"
+            + "3. Determine urgency levels for veterinary care\n"
+            + "4. Offer first aid and care recommendations\n"
+            + "5. Know when to recommend immediate emergency care\n"
+            + "6. Always try to comfort the pet owner and show empathy\n"
+            + "7. If the user's question is resolved and they indicate no further issues, politely end the conversation.\n\n"
 
-        + "CRITICAL MEMORY INSTRUCTIONS:\n"
-        + "- ALWAYS read and remember the CONVERSATION CONTEXT provided below\n"
-        + "- Remember the pet's name, medications given, symptoms discussed, and all previous details\n" 
-        + "- Reference previous conversation when relevant (e.g., 'As we discussed about Bill earlier...')\n"
-        + "- If asked about information shared earlier, recall it from the context\n"
-        + "- Build upon previous discussions rather than starting fresh each time\n\n"
+            + "CRITICAL MEMORY INSTRUCTIONS:\n"
+            + "- ALWAYS read and remember the CONVERSATION CONTEXT provided below\n"
+            + "- Remember the pet's name, type, breed, age, weight, medications given, symptoms discussed, and all previous details\n"
+            + "- Reference the animal profile information when relevant (e.g., 'Given that Max is a 3-year-old Golden Retriever...')\n"
+            + "- Reference previous conversation when relevant (e.g., 'As we discussed about the vomiting earlier...')\n"
+            + "- If asked about information shared earlier, recall it from the context\n"
+            + "- Build upon previous discussions rather than starting fresh each time\n"
+            + "- Use the pet's specific details (type, breed, age, weight) to give more targeted advice\n\n"
 
-        + "CRITICAL: You MUST respond with ONLY a valid JSON object. No other text before or after.\n\n"
+            + "ANIMAL PROFILE USAGE:\n"
+            + "- Always reference the animal type, breed, age, and weight when giving advice if available\n"
+            + "- Consider breed-specific health issues and characteristics\n"
+            + "- Adjust recommendations based on the pet's age (puppy/kitten vs senior care)\n"
+            + "- Use weight information for dosage or treatment recommendations when appropriate\n"
+            + "- Acknowledge previously identified symptoms when assessing new concerns\n\n"
 
-        + "REQUIRED JSON STRUCTURE:\n"
-        + "{\n"
-        + "  \"urgency\": \"LOW|MEDIUM|HIGH|CRITICAL\",\n"
-        + "  \"assessment\": \"Brief professional assessment of the situation\",\n"
-        + "  \"messageSegments\": [\n"
-        + "    {\n"
-        + "      \"type\": \"greeting|assessment|advice|emergency|warning|question\",\n"
-        + "      \"content\": \"Message text here\",\n"
-        + "      \"emphasis\": \"normal|bold|urgent\",\n"
-        + "      \"delay\": 800\n"
-        + "    }\n"
-        + "  ],\n"
-        + "  \"structuredContent\": {\n"
-        + "    \"lists\": [\n"
-        + "      {\n"
-        + "        \"title\": \"Optional list title\",\n"
-        + "        \"type\": \"bullet|numbered\",\n"
-        + "        \"items\": [\"Item 1\", \"Item 2\"]\n"
-        + "      }\n"
-        + "    ],\n"
-        + "    \"warnings\": [\"Important warning text\"],\n"
-        + "    \"recommendations\": [\n"
-        + "      {\n"
-        + "        \"action\": \"Specific action to take\",\n"
-        + "        \"timeframe\": \"immediate|hours|24h|days|monitor\",\n"
-        + "        \"priority\": \"high|medium|low\"\n"
-        + "      }\n"
-        + "    ],\n"
-        + "    \"followUpQuestions\": [\"Question 1?\", \"Question 2?\"]\n"
-        + "  },\n"
-        + "  \"nextSteps\": \"Clear next step instruction\",\n"
-        + "  \"vetContactAdvice\": {\n"
-        + "    \"recommended\": true,\n"
-        + "    \"timeframe\": \"immediate|today|within_24h|within_week|routine\",\n"
-        + "    \"reason\": \"Reason for vet contact\"\n"
-        + "  }\n"
-        + "}\n\n"
+            + "CRITICAL: You MUST respond with ONLY a valid JSON object. No other text before or after.\n\n"
 
-        + "RESPONSE RULES:\n"
-        + "- Respond with ONLY the JSON object, no additional text\n"
-        + "- Use 2-4 messageSegments for natural conversation flow\n"
-        + "- Include relevant lists in structuredContent when appropriate\n"
-        + "- Set delay between 300-1200ms for message segments\n"
-        + "- Always include nextSteps and vetContactAdvice\n"
-        + "- Use proper JSON escaping for quotes and special characters\n"
-        + "- Be empathetic, professional, and clear\n"
-        + "- REFERENCE PREVIOUS CONVERSATION WHEN RELEVANT\n\n";
+            + "REQUIRED JSON STRUCTURE:\n"
+            + "{\n"
+            + "  \"urgency\": \"LOW|MEDIUM|HIGH|CRITICAL\",\n"
+            + "  \"assessment\": \"Brief professional assessment referencing the pet's profile when relevant\",\n"
+            + "  \"messageSegments\": [\n"
+            + "    {\n"
+            + "      \"type\": \"greeting|assessment|advice|emergency|warning|question\",\n"
+            + "      \"content\": \"Message text here (reference pet details when relevant)\",\n"
+            + "      \"emphasis\": \"normal|bold|urgent\",\n"
+            + "      \"delay\": 800\n"
+            + "    }\n"
+            + "  ],\n"
+            + "  \"structuredContent\": {\n"
+            + "    \"lists\": [\n"
+            + "      {\n"
+            + "        \"title\": \"Optional list title\",\n"
+            + "        \"type\": \"bullet|numbered\",\n"
+            + "        \"items\": [\"Item 1\", \"Item 2\"]\n"
+            + "      }\n"
+            + "    ],\n"
+            + "    \"warnings\": [\"Important warning text\"],\n"
+            + "    \"recommendations\": [\n"
+            + "      {\n"
+            + "        \"action\": \"Specific action to take\",\n"
+            + "        \"timeframe\": \"immediate|hours|24h|days|monitor\",\n"
+            + "        \"priority\": \"high|medium|low\"\n"
+            + "      }\n"
+            + "    ],\n"
+            + "    \"followUpQuestions\": [\"Question 1?\", \"Question 2?\"],\n"
+            + "    \"identifiedSymptoms\": [\"symptom1\", \"symptom2\"] // NEW: List any symptoms you identify\n"
+            + "  },\n"
+            + "  \"nextSteps\": \"Clear next step instruction\",\n"
+            + "  \"vetContactAdvice\": {\n"
+            + "    \"recommended\": true,\n"
+            + "    \"timeframe\": \"immediate|today|within_24h|within_week|routine\",\n"
+            + "    \"reason\": \"Reason for vet contact\"\n"
+            + "  }\n"
+            + "}\n\n"
+
+            + "RESPONSE RULES:\n"
+            + "- Respond with ONLY the JSON object, no additional text\n"
+            + "- Use 2-4 messageSegments for natural conversation flow\n"
+            + "- Include relevant lists in structuredContent when appropriate\n"
+            + "- Set delay between 300-1200ms for message segments\n"
+            + "- Always include nextSteps and vetContactAdvice\n"
+            + "- Use proper JSON escaping for quotes and special characters\n"
+            + "- Be empathetic, professional, and clear\n"
+            + "- ALWAYS reference the pet's profile details when giving advice\n"
+            + "- Include identifiedSymptoms array with any symptoms you detect from the conversation\n\n";
 
     public String generateResponse(String userMessage, ConversationContext context,
             List<AnalysisResult> imageAnalyses) {
@@ -262,6 +273,16 @@ public class AIConversationService {
                 }
             }
 
+            // **NEW: Parse identified symptoms**
+            JsonNode identifiedSymptoms = structuredContent.path("identifiedSymptoms");
+            List<String> symptoms = new ArrayList<>();
+            if (identifiedSymptoms.isArray()) {
+                for (JsonNode symptom : identifiedSymptoms) {
+                    symptoms.add(symptom.asText());
+                }
+            }
+            response.setIdentifiedSymptoms(symptoms);
+
             response.setNextSteps(rootNode.path("nextSteps").asText(""));
 
             // Parse vet contact advice
@@ -344,14 +365,30 @@ public class AIConversationService {
     public StructuredVetResponse generateStructuredResponse(String userMessage, ConversationContext context,
             List<AnalysisResult> imageAnalyses) {
         try {
+            System.out.println("DEBUG: generateStructuredResponse called");
+            System.out.println("DEBUG: userMessage = " + userMessage);
+            System.out.println("DEBUG: context = " + context);
+            System.out.println("DEBUG: imageAnalyses = " + (imageAnalyses != null ? imageAnalyses.size() : "null"));
+
+            if (context != null) {
+                System.out.println("DEBUG: context.getAnimalProfile() = " + context.getAnimalProfile());
+                System.out.println("DEBUG: context.getIdentifiedSymptoms() = " + context.getIdentifiedSymptoms());
+            }
+
             String contextPrompt = buildContextPrompt(context, imageAnalyses);
+            System.out.println("DEBUG: contextPrompt built successfully");
+
             String fullPrompt = SYSTEM_PROMPT + "\n\n" + contextPrompt + "\n\nUser: " + userMessage;
+            System.out.println("DEBUG: fullPrompt length = " + fullPrompt.length());
 
             String rawResponse = callHackClubAPI(fullPrompt);
+            System.out.println("DEBUG: rawResponse received");
+
             return parseStructuredResponse(rawResponse);
 
         } catch (Exception e) {
-            System.err.println("AI service error: " + e.getMessage());
+            System.err.println("ERROR in generateStructuredResponse: " + e.getMessage());
+            e.printStackTrace();
             return generateFallbackStructuredResponse(userMessage, context, imageAnalyses);
         }
     }
@@ -361,6 +398,10 @@ public class AIConversationService {
 
         contextBuilder.append("CONVERSATION CONTEXT:\n");
         System.out.println("Building context prompt with conversation context: " + context.getAnimalProfile());
+
+        if (context == null) {
+            context = new ConversationContext("unknown-session");
+        }
 
         // Animal profile information
         if (context.getAnimalProfile() != null) {
@@ -378,6 +419,9 @@ public class AIConversationService {
             if (profile.getWeight() != null) {
                 contextBuilder.append("- Weight: ").append(profile.getWeight()).append(" kg\n");
             }
+            if (profile.getAnimalType() != null) {
+                contextBuilder.append("- Type: ").append(profile.getAnimalType()).append("\n");
+            }
         }
 
         // Current symptoms
@@ -394,25 +438,53 @@ public class AIConversationService {
 
         // Multiple image analysis results
         if (imageAnalyses != null && !imageAnalyses.isEmpty()) {
-            contextBuilder.append("\nImage Analysis Results (").append(imageAnalyses.size()).append(" images):\n");
+            contextBuilder.append("\nIMAGE ANALYSIS RESULTS: \n");
+            contextBuilder.append("I have analyzed ").append(imageAnalyses.size())
+                    .append(" image(s) of the animal. Here are the findings:\n\n");
 
             for (int i = 0; i < imageAnalyses.size(); i++) {
                 AnalysisResult imageAnalysis = imageAnalyses.get(i);
-                contextBuilder.append("Image ").append(i + 1).append(":\n");
-                contextBuilder.append("  - Condition: ").append(imageAnalysis.getCondition()).append("\n");
-                contextBuilder.append("  - Confidence: ")
-                        .append(String.format("%.1f%%", imageAnalysis.getConfidence() * 100)).append("\n");
-                contextBuilder.append("  - Urgency: ").append(imageAnalysis.getUrgency().getDisplayName()).append("\n");
+                contextBuilder.append("IMAGE ").append(i + 1).append(" ANALYSIS:\n");
 
+                // Condition and confidence
+                contextBuilder.append("Overall Assessment: ").append(imageAnalysis.getCondition()).append("\n");
+                contextBuilder.append("Confidence Level: ")
+                        .append(String.format("%.1f%%", imageAnalysis.getConfidence() * 100)).append("\n");
+                contextBuilder.append("Urgency Level: ").append(imageAnalysis.getUrgency().getDisplayName())
+                        .append("\n");
+
+                // Observed symptoms
                 if (!imageAnalysis.getObservedSymptoms().isEmpty()) {
-                    contextBuilder.append("  - Observed symptoms: ")
-                            .append(String.join(", ", imageAnalysis.getObservedSymptoms())).append("\n");
+                    contextBuilder.append("Observed Symptoms: ");
+                    contextBuilder.append(String.join(", ", imageAnalysis.getObservedSymptoms())).append("\n");
                 }
-                if (imageAnalysis.getDescription() != null) {
-                    contextBuilder.append("  - Description: ").append(imageAnalysis.getDescription()).append("\n");
+
+                // Detailed description
+                if (imageAnalysis.getDescription() != null && !imageAnalysis.getDescription().trim().isEmpty()) {
+                    contextBuilder.append("Detailed Findings: ").append(imageAnalysis.getDescription()).append("\n");
                 }
+
                 contextBuilder.append("\n");
             }
+
+            // Summary of all image analyses
+            contextBuilder.append("SUMMARY OF VISUAL FINDINGS:\n");
+            boolean hasCriticalFindings = imageAnalyses.stream()
+                    .anyMatch(analysis -> analysis.getUrgency() == UrgencyLevel.CRITICAL);
+            boolean hasHighFindings = imageAnalyses.stream()
+                    .anyMatch(analysis -> analysis.getUrgency() == UrgencyLevel.HIGH);
+
+            if (hasCriticalFindings) {
+                contextBuilder
+                        .append("CRITICAL: Image analysis reveals urgent concerns requiring immediate attention.\n");
+            } else if (hasHighFindings) {
+                contextBuilder
+                        .append("URGENT: Image analysis shows concerning findings that need prompt evaluation.\n");
+            } else {
+                contextBuilder.append("Image analysis did not detect any urgent visual concerns.\n");
+            }
+
+            contextBuilder.append("\n");
         }
 
         // Recent conversation history

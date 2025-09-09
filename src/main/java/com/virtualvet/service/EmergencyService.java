@@ -1,6 +1,5 @@
 package com.virtualvet.service;
 
-
 import com.virtualvet.enums.model.UrgencyLevel;
 import com.virtualvet.model.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,70 +8,115 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.http.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 public class EmergencyService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(EmergencyService.class);
 
-    @Autowired
+    private static final List<VetLocation> defaultEmergencyVets = Arrays.asList(
+        new VetLocation("Ottawa Veterinary Hospital", "1155 Bank St, Ottawa, ON", "+1-613-731-9911", 45.3950, -75.6839),
+        new VetLocation("Centretown Veterinary Hospital", "320 Catherine St, Ottawa, ON", "+1-613-567-0500", 45.4161, -75.6934),
+        new VetLocation("Merivale Cat Hospital", "1576 Merivale Rd, Ottawa, ON", "+1-613-225-9731", 45.3480, -75.7237),
+        new VetLocation("Alta Vista Animal Hospital", "2616 Bank St, Ottawa, ON", "+1-613-731-5704", 45.3678, -75.6817),
+        new VetLocation("Kanata Animal Hospital", "570 Hazeldean Rd, Ottawa, ON", "+1-613-836-2848", 45.3019, -75.9023)
+    );
+
+    @Autowired(required = false) // Make RestTemplate optional
     private RestTemplate restTemplate;
     
     private final ObjectMapper objectMapper = new ObjectMapper();
     
-    // Default emergency vet locations (would typically come from a database or external API)
-    private final List<VetLocation> defaultEmergencyVets = Arrays.asList(
-        new VetLocation("24/7 Emergency Vet Clinic", "123 Emergency St, City Center", "+1-555-0911", 45.3311, -75.6981),
-        new VetLocation("Animal Emergency Hospital", "456 Rescue Ave, Downtown", "+1-555-0922", 45.3411, -75.7081),
-        new VetLocation("Pet Emergency Care", "789 Urgent Blvd, Westside", "+1-555-0933", 45.3211, -75.6881),
-        new VetLocation("Critical Pet Care Center", "321 Lifesaver Rd, Eastside", "+1-555-0944", 45.3511, -75.7181),
-        new VetLocation("Emergency Animal Services", "654 Rapid Response Way, Northside", "+1-555-0955", 45.3611, -75.6781)
-    );
-    
     public List<VetLocation> findNearbyVets(double latitude, double longitude, int radiusKm) {
+        logger.info("Finding nearby vets for coordinates: {}, {} within {} km", latitude, longitude, radiusKm);
+        
         try {
-            // Try to get real vet locations from external API
-            List<VetLocation> realVets = searchVetsWithNominatim(latitude, longitude, radiusKm);
-            if (!realVets.isEmpty()) {
-                return realVets;
+            // Validate input parameters
+            if (latitude < -90 || latitude > 90) {
+                logger.warn("Invalid latitude: {}. Using default vets.", latitude);
+                return getDefaultVetsWithinRadius(latitude, longitude, radiusKm);
             }
+            
+            if (longitude < -180 || longitude > 180) {
+                logger.warn("Invalid longitude: {}. Using default vets.", longitude);
+                return getDefaultVetsWithinRadius(latitude, longitude, radiusKm);
+            }
+
+            // Try to get real vet locations from external API only if RestTemplate is available
+            if (restTemplate != null) {
+                logger.info("Attempting to search with external API...");
+                List<VetLocation> realVets = searchVetsWithNominatim(latitude, longitude, radiusKm);
+                if (!realVets.isEmpty()) {
+                    logger.info("Found {} real vets from external API", realVets.size());
+                    return realVets;
+                } else {
+                    logger.info("No real vets found from external API, using defaults");
+                }
+            } else {
+                logger.info("RestTemplate not available, using default vets");
+            }
+            
         } catch (Exception e) {
-            // Fallback to default locations
+            logger.error("Error occurred while searching for vets: {}", e.getMessage(), e);
         }
         
         // Use default emergency vet locations and calculate distances
+        return getDefaultVetsWithinRadius(latitude, longitude, radiusKm);
+    }
+    
+    private List<VetLocation> getDefaultVetsWithinRadius(double latitude, double longitude, int radiusKm) {
+        logger.info("Using default vet locations for search");
         List<VetLocation> nearbyVets = new ArrayList<>();
         
         for (VetLocation vet : defaultEmergencyVets) {
-            // If coordinates are provided, calculate distance
-            if (latitude != 0.0 && longitude != 0.0) {
-                double distance = calculateDistance(latitude, longitude, vet.getLatitude(), vet.getLongitude());
-                if (distance <= radiusKm) {
-                    vet.setDistanceKm(distance);
-                    vet.setEmergencyClinic(true);
-                    vet.setOperatingHours("24/7 Emergency Care");
-                    vet.setRating(4.2 + Math.random() * 0.6); // Simulate ratings between 4.2-4.8
-                    nearbyVets.add(vet);
+            try {
+
+                VetLocation vetCopy = new VetLocation(vet);
+
+                // If coordinates are provided, calculate distance
+                if (latitude != 0.0 && longitude != 0.0) {
+                    double distance = calculateDistance(latitude, longitude, vetCopy.getLatitude(), vetCopy.getLongitude());
+                    logger.debug("Distance to {}: {} km", vetCopy.getName(), distance);
+                    
+                    if (distance <= radiusKm) {
+                        vetCopy.setDistanceKm(distance);
+                        vetCopy.setEmergencyClinic(true);
+                        vetCopy.setOperatingHours("24/7 Emergency Care");
+                        vetCopy.setRating(4.2 + Math.random() * 0.6);
+                        nearbyVets.add(vetCopy);
+                        logger.debug("Added vet: {} at distance {} km", vetCopy.getName(), distance);
+                    }
+                } else {
+                    // If no coordinates provided, return all default locations
+                    vetCopy.setEmergencyClinic(true);
+                    vetCopy.setOperatingHours("24/7 Emergency Care");
+                    vetCopy.setRating(4.2 + Math.random() * 0.6);
+                    nearbyVets.add(vetCopy);
+                    logger.debug("Added default vet: {}", vetCopy.getName());
                 }
-            } else {
-                // If no coordinates provided, return all default locations
-                vet.setEmergencyClinic(true);
-                vet.setOperatingHours("24/7 Emergency Care");
-                vet.setRating(4.2 + Math.random() * 0.6);
-                nearbyVets.add(vet);
+            } catch (Exception e) {
+                logger.error("Error processing vet location {}: {}", vet.getName(), e.getMessage());
             }
         }
         
         // Sort by distance if coordinates were provided
         if (latitude != 0.0 && longitude != 0.0) {
             nearbyVets.sort((v1, v2) -> Double.compare(v1.getDistanceKm(), v2.getDistanceKm()));
+            logger.info("Sorted {} vets by distance", nearbyVets.size());
         }
         
-        return nearbyVets.stream().limit(10).collect(Collectors.toList());
+        List<VetLocation> result = nearbyVets.stream().limit(10).collect(Collectors.toList());
+        logger.info("Returning {} nearby vets", result.size());
+        return result;
     }
     
     private List<VetLocation> searchVetsWithNominatim(double latitude, double longitude, int radiusKm) {
+        logger.info("Searching vets with Nominatim API");
         List<VetLocation> vets = new ArrayList<>();
         
         try {
@@ -83,41 +127,57 @@ public class EmergencyService {
                 longitude - 0.1, latitude + 0.1, longitude + 0.1, latitude - 0.1
             );
             
+            logger.debug("Making request to: {}", url);
+            
             HttpHeaders headers = new HttpHeaders();
             headers.set("User-Agent", "VetChatBot/1.0 (Virtual Veterinary Assistant)");
             
             HttpEntity<String> entity = new HttpEntity<>(headers);
             
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
+            logger.info("Nominatim API response status: {}", response.getStatusCode());
             
             if (response.getStatusCode() == HttpStatus.OK) {
-                JsonNode results = objectMapper.readTree(response.getBody());
+                String responseBody = response.getBody();
+                logger.debug("API response body length: {}", responseBody != null ? responseBody.length() : 0);
+                
+                JsonNode results = objectMapper.readTree(responseBody);
                 
                 if (results.isArray()) {
+                    logger.info("Processing {} results from Nominatim", results.size());
                     for (JsonNode result : results) {
-                        VetLocation vet = parseNominatimResult(result);
-                        if (vet != null) {
-                            double distance = calculateDistance(latitude, longitude, vet.getLatitude(), vet.getLongitude());
-                            if (distance <= radiusKm) {
-                                vet.setDistanceKm(distance);
-                                vets.add(vet);
+                        try {
+                            VetLocation vet = parseNominatimResult(result);
+                            if (vet != null) {
+                                double distance = calculateDistance(latitude, longitude, vet.getLatitude(), vet.getLongitude());
+                                if (distance <= radiusKm) {
+                                    vet.setDistanceKm(distance);
+                                    vets.add(vet);
+                                    logger.debug("Added external vet: {} at {} km", vet.getName(), distance);
+                                }
                             }
+                        } catch (Exception e) {
+                            logger.warn("Failed to parse individual result: {}", e.getMessage());
                         }
                     }
+                } else {
+                    logger.warn("Expected array response from Nominatim, got: {}", results.getNodeType());
                 }
+            } else {
+                logger.warn("Nominatim API returned status: {}", response.getStatusCode());
             }
         } catch (Exception e) {
-            // Log error but don't throw - we'll use fallback data
-            System.err.println("Failed to search vets with Nominatim: " + e.getMessage());
+            logger.error("Failed to search vets with Nominatim: {}", e.getMessage(), e);
         }
         
+        logger.info("Found {} vets from external API", vets.size());
         return vets;
     }
     
     private VetLocation parseNominatimResult(JsonNode result) {
         try {
             String name = result.has("display_name") ? result.get("display_name").asText() : "Veterinary Clinic";
-            String address = name; // Nominatim includes full address in display_name
+            String address = name;
             double lat = result.get("lat").asDouble();
             double lon = result.get("lon").asDouble();
             
@@ -129,21 +189,56 @@ public class EmergencyService {
             VetLocation vet = new VetLocation(name, address, "Contact for phone number", lat, lon);
             vet.setEmergencyClinic(name.toLowerCase().contains("emergency") || name.toLowerCase().contains("24"));
             vet.setOperatingHours("Contact for hours");
-            vet.setRating(4.0 + Math.random() * 1.0); // Simulate rating between 4.0-5.0
+            vet.setRating(4.0 + Math.random() * 1.0);
             
             return vet;
         } catch (Exception e) {
+            logger.error("Error parsing Nominatim result: {}", e.getMessage());
             return null;
         }
     }
     
+    public Map<String, Object> getEmergencyContactInfo(double latitude, double longitude) {
+        logger.info("Getting emergency contact info for coordinates: {}, {}", latitude, longitude);
+        
+        try {
+            Map<String, Object> contactInfo = new HashMap<>();
+            
+            // Get nearby emergency vets
+            List<VetLocation> emergencyVets = findNearbyVets(latitude, longitude, 50)
+                .stream()
+                .filter(VetLocation::isEmergencyClinic)
+                .limit(3)
+                .collect(Collectors.toList());
+            
+            logger.info("Found {} emergency vets for contact info", emergencyVets.size());
+            
+            contactInfo.put("nearestEmergencyVets", emergencyVets);
+            contactInfo.put("emergencyHotline", getEmergencyHotline());
+            contactInfo.put("poisonControlHotline", "1-888-426-4435");
+            contactInfo.put("preparationTips", getEmergencyPreparationTips());
+            
+            logger.info("Emergency contact info prepared successfully");
+            return contactInfo;
+            
+        } catch (Exception e) {
+            logger.error("Error getting emergency contact info: {}", e.getMessage(), e);
+            // Return minimal info on error
+            Map<String, Object> fallbackInfo = new HashMap<>();
+            fallbackInfo.put("nearestEmergencyVets", Collections.emptyList());
+            fallbackInfo.put("emergencyHotline", getEmergencyHotline());
+            fallbackInfo.put("poisonControlHotline", "1-888-426-4435");
+            fallbackInfo.put("error", "Unable to get complete emergency info");
+            return fallbackInfo;
+        }
+    }
+    
+    // Keep all your other existing methods unchanged...
     public boolean isEmergencyCase(UrgencyLevel urgency, List<String> symptoms) {
-        // Check urgency level
         if (urgency == UrgencyLevel.CRITICAL || urgency == UrgencyLevel.HIGH) {
             return true;
         }
         
-        // Check for emergency symptoms
         if (symptoms != null) {
             for (String symptom : symptoms) {
                 if (isEmergencySymptom(symptom)) {
@@ -186,7 +281,6 @@ public class EmergencyService {
             instructions.add("Prepare to transport your pet if symptoms worsen");
         }
         
-        // Add specific symptom instructions
         if (symptoms != null) {
             for (String symptom : symptoms) {
                 String lowerSymptom = symptom.toLowerCase();
@@ -210,7 +304,7 @@ public class EmergencyService {
     }
     
     public String getEmergencyHotline() {
-        return "+1-555-PET-HELP"; // This would be a real emergency hotline
+        return "+1-555-PET-HELP";
     }
     
     public List<String> getEmergencyPreparationTips() {
@@ -227,7 +321,6 @@ public class EmergencyService {
     }
     
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-        // Haversine formula to calculate distance between two points on Earth
         final double R = 6371; // Radius of the Earth in kilometers
         
         double latDistance = Math.toRadians(lat2 - lat1);
@@ -239,24 +332,6 @@ public class EmergencyService {
         
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         
-        return R * c; // Distance in kilometers
-    }
-    
-    public Map<String, Object> getEmergencyContactInfo(double latitude, double longitude) {
-        Map<String, Object> contactInfo = new HashMap<>();
-        
-        // Get nearby emergency vets
-        List<VetLocation> emergencyVets = findNearbyVets(latitude, longitude, 50)
-            .stream()
-            .filter(VetLocation::isEmergencyClinic)
-            .limit(3)
-            .collect(Collectors.toList());
-        
-        contactInfo.put("nearestEmergencyVets", emergencyVets);
-        contactInfo.put("emergencyHotline", getEmergencyHotline());
-        contactInfo.put("poisonControlHotline", "1-888-426-4435");
-        contactInfo.put("preparationTips", getEmergencyPreparationTips());
-        
-        return contactInfo;
+        return R * c;
     }
 }

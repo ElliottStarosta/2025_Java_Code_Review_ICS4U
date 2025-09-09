@@ -6,6 +6,7 @@ import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
@@ -69,6 +70,9 @@ public class ChatView extends VerticalLayout {
     @Autowired
     private ChatService chatService;
 
+    private double userLatitude = 0.0;
+    private double userLongitude = 0.0;
+
     private String currentSessionId;
     private Div emergencyBanner;
     private boolean isWaitingForResponse = false;
@@ -83,6 +87,7 @@ public class ChatView extends VerticalLayout {
         createComponents();
         setupLayout();
         startNewSession();
+
     }
 
     private void createComponents() {
@@ -480,6 +485,7 @@ public class ChatView extends VerticalLayout {
                             String response = ApiClient.postMultipart("http://localhost:8080/api/chat/message",
                                     requestBody);
                             JsonNode jsonResponse = objectMapper.readTree(response);
+                            System.out.println("JSON RESPONSE: " + jsonResponse);
                             return jsonResponse.path("response").asText("Sorry, I couldn't generate a response.");
 
                         } catch (Exception e) {
@@ -754,195 +760,197 @@ public class ChatView extends VerticalLayout {
     }
 
     private void addUserMessage(String text, List<UploadedFileData> attachments) {
-    // Update message group tracking
-    if (!"user".equals(lastMessageSender)) {
-        // Starting a new user message group
-        hideAvatarsInPreviousGroup();
-        currentMessageGroup.clear();
-        lastMessageSender = "user";
-    }
-
-    Div messageRow = new Div();
-    messageRow.setWidthFull();
-    messageRow.getStyle()
-            .set("display", "flex")
-            .set("justify-content", "flex-end")
-            .set("margin-bottom", "12px")
-            .set("padding", "0 4px")
-            .set("position", "relative");
-
-    // User avatar - initially hidden, will be shown only on the last message
-    Div userAvatar = new Div();
-    userAvatar.setText("👤");
-    userAvatar.getStyle()
-            .set("width", "24px")
-            .set("height", "24px")
-            .set("border-radius", "50%")
-            .set("background", "#e5e7eb")
-            .set("display", "none") // Initially hidden
-            .set("align-items", "center")
-            .set("justify-content", "center")
-            .set("font-size", "12px")
-            .set("margin-left", "8px")
-            .set("margin-top", "auto")
-            .set("flex-shrink", "0");
-
-    // Add class for easier identification
-    userAvatar.addClassName("user-avatar");
-
-    // Message content container
-    Div messageContent = new Div();
-    messageContent.getStyle()
-            .set("display", "flex")
-            .set("flex-direction", "column")
-            .set("align-items", "flex-end")
-            .set("max-width", "80%")
-            .set("margin-right", "32px"); // Add right margin for avatar space
-
-    // Image attachments (above message bubble)
-    if (!attachments.isEmpty()) {
-        Div attachmentContainer = new Div();
-        attachmentContainer.getStyle()
-                .set("display", "flex")
-                .set("flex-wrap", "wrap")
-                .set("gap", "4px")
-                .set("margin-bottom", "4px")
-                .set("justify-content", "flex-end");
-
-        for (UploadedFileData attachment : attachments) {
-            Div attachmentChip = new Div();
-            attachmentChip.getStyle()
-                    .set("background", "#dbeafe")
-                    .set("color", "#1e40af")
-                    .set("padding", "4px 8px")
-                    .set("border-radius", "12px")
-                    .set("font-size", "12px")
-                    .set("display", "flex")
-                    .set("align-items", "center")
-                    .set("gap", "4px")
-                    .set("border", "1px solid #bfdbfe");
-
-            Icon fileIcon = new Icon(VaadinIcon.FILE_PICTURE);
-            fileIcon.setSize("12px");
-            fileIcon.setColor("#1e40af");
-
-            Span fileName = new Span(attachment.getFilename());
-            fileName.getStyle().set("font-size", "11px");
-
-            attachmentChip.add(fileIcon, fileName);
-            attachmentContainer.add(attachmentChip);
+        // Update message group tracking
+        if (!"user".equals(lastMessageSender)) {
+            // Starting a new user message group
+            hideAvatarsInPreviousGroup();
+            currentMessageGroup.clear();
+            lastMessageSender = "user";
         }
-        messageContent.add(attachmentContainer);
-    }
 
-    // Message bubble
-    Div messageBubble = new Div();
-    messageBubble.getElement().setProperty("innerHTML", formatText(text));
-    messageBubble.getStyle()
-            .set("background", "#2563eb")
-            .set("color", "white")
-            .set("padding", "12px 16px")
-            .set("border-radius", "18px 18px 6px 18px")
-            .set("min-width", "20px")
-            .set("font-size", "16px")
-            .set("font-family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif")
-            .set("line-height", "1.4")
-            .set("word-wrap", "break-word")
-            .set("white-space", "pre-wrap")
-            .set("position", "relative");
+        Div messageRow = new Div();
+        messageRow.setWidthFull();
+        messageRow.getStyle()
+                .set("display", "flex")
+                .set("justify-content", "flex-end")
+                .set("margin-bottom", "12px")
+                .set("padding", "0 4px")
+                .set("position", "relative");
 
-    // Edit button (3 dots)
-    Button editButton = new Button();
-    Icon dotsIcon = new Icon(VaadinIcon.ELLIPSIS_DOTS_H);
-    dotsIcon.setSize("14px");
-    dotsIcon.setColor("#9ca3af");
-    editButton.setIcon(dotsIcon);
-    editButton.getStyle()
-            .set("position", "absolute")
-            .set("top", "-8px")
-            .set("right", "-8px")
-            .set("width", "24px")
-            .set("height", "24px")
-            .set("min-width", "24px")
-            .set("background", "white")
-            .set("border", "1px solid #e5e7eb")
-            .set("border-radius", "50%")
-            .set("display", "none")
-            .set("align-items", "center")
-            .set("justify-content", "center")
-            .set("cursor", "pointer")
-            .set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)")
-            .set("z-index", "10");
+        // User avatar - initially hidden, will be shown only on the last message
+        Div userAvatar = new Div();
+        userAvatar.setText("👤");
+        userAvatar.getStyle()
+                .set("width", "24px")
+                .set("height", "24px")
+                .set("border-radius", "50%")
+                .set("background", "#e5e7eb")
+                .set("display", "none") // Initially hidden
+                .set("align-items", "center")
+                .set("justify-content", "center")
+                .set("font-size", "12px")
+                .set("margin-left", "8px")
+                .set("margin-top", "auto")
+                .set("flex-shrink", "0");
 
-    editButton.addClickListener(e -> {
-        showNotification("Edit functionality coming soon!", false);
-    });
+        // Add class for easier identification
+        userAvatar.addClassName("user-avatar");
 
-    messageBubble.add(editButton);
+        // Message content container
+        Div messageContent = new Div();
+        messageContent.getStyle()
+                .set("display", "flex")
+                .set("flex-direction", "column")
+                .set("align-items", "flex-end")
+                .set("max-width", "80%")
+                .set("margin-right", "32px"); // Add right margin for avatar space
 
-    // Show edit button on hover
-    messageBubble.getElement().addEventListener("mouseenter", e -> {
-        editButton.getStyle().set("display", "flex");
-    });
+        // Image attachments (above message bubble)
+        if (!attachments.isEmpty()) {
+            Div attachmentContainer = new Div();
+            attachmentContainer.getStyle()
+                    .set("display", "flex")
+                    .set("flex-wrap", "wrap")
+                    .set("gap", "4px")
+                    .set("margin-bottom", "4px")
+                    .set("justify-content", "flex-end");
 
-    messageBubble.getElement().addEventListener("mouseleave", e -> {
-        editButton.getStyle().set("display", "none");
-    });
+            for (UploadedFileData attachment : attachments) {
+                Div attachmentChip = new Div();
+                attachmentChip.getStyle()
+                        .set("background", "#dbeafe")
+                        .set("color", "#1e40af")
+                        .set("padding", "4px 8px")
+                        .set("border-radius", "12px")
+                        .set("font-size", "12px")
+                        .set("display", "flex")
+                        .set("align-items", "center")
+                        .set("gap", "4px")
+                        .set("border", "1px solid #bfdbfe");
 
-    messageContent.add(messageBubble);
-    messageRow.add(messageContent, userAvatar);
-    messagesContainer.add(messageRow);
-    messageElements.add(messageRow);
-    currentMessageGroup.add(messageRow);
-    
-    // Show avatar on this message (it's the current last user message)
-    showUserAvatarOnLastMessage();
-}
+                Icon fileIcon = new Icon(VaadinIcon.FILE_PICTURE);
+                fileIcon.setSize("12px");
+                fileIcon.setColor("#1e40af");
 
-// Helper method to show user avatar only on the last message
-private void showUserAvatarOnLastMessage() {
-    // Hide all user avatars in current group
-    for (Div messageRow : currentMessageGroup) {
-        messageRow.getChildren()
-                .filter(component -> component instanceof Div)
-                .forEach(component -> {
-                    Div div = (Div) component;
-                    if ("👤".equals(div.getText())) {
-                        div.getStyle().set("display", "none");
-                    }
-                });
-    }
-    
-    // Show avatar only on the last message in the group
-    if (!currentMessageGroup.isEmpty()) {
-        Div lastMessageRow = currentMessageGroup.get(currentMessageGroup.size() - 1);
-        lastMessageRow.getChildren()
-                .filter(component -> component instanceof Div)
-                .forEach(component -> {
-                    Div div = (Div) component;
-                    if ("👤".equals(div.getText())) {
-                        div.getStyle().set("display", "flex");
-                        // Adjust message content margin
-                        lastMessageRow.getChildren()
-                                .filter(comp -> comp instanceof Div && 
-                                       comp != div &&
-                                       ((Div) comp).getStyle().get("flex-direction") != null)
-                                .findFirst()
-                                .ifPresent(content -> ((Div) content).getStyle().set("margin-right", "0"));
-                    }
-                });
-    }
-}
-// Helper method to hide avatars in previous message group
-private void hideAvatarsInPreviousGroup() {
-    // This method ensures that when switching between bot/user messages,
-    // the previous group's avatars are properly managed
-    if ("user".equals(lastMessageSender)) {
-        // We're switching from user to bot, make sure last user message shows avatar
+                Span fileName = new Span(attachment.getFilename());
+                fileName.getStyle().set("font-size", "11px");
+
+                attachmentChip.add(fileIcon, fileName);
+                attachmentContainer.add(attachmentChip);
+            }
+            messageContent.add(attachmentContainer);
+        }
+
+        // Message bubble
+        Div messageBubble = new Div();
+        messageBubble.getElement().setProperty("innerHTML", formatText(text));
+        messageBubble.getStyle()
+                .set("background", "#2563eb")
+                .set("color", "white")
+                .set("padding", "12px 16px")
+                .set("border-radius", "18px 18px 6px 18px")
+                .set("min-width", "20px")
+                .set("font-size", "16px")
+                .set("font-family", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif")
+                .set("line-height", "1.4")
+                .set("word-wrap", "break-word")
+                .set("white-space", "pre-wrap")
+                .set("position", "relative");
+
+        // Edit button (3 dots)
+        Button editButton = new Button();
+        Icon dotsIcon = new Icon(VaadinIcon.ELLIPSIS_DOTS_H);
+        dotsIcon.setSize("14px");
+        dotsIcon.setColor("#9ca3af");
+        editButton.setIcon(dotsIcon);
+        editButton.getStyle()
+                .set("position", "absolute")
+                .set("top", "-8px")
+                .set("right", "-8px")
+                .set("width", "24px")
+                .set("height", "24px")
+                .set("min-width", "24px")
+                .set("background", "white")
+                .set("border", "1px solid #e5e7eb")
+                .set("border-radius", "50%")
+                .set("display", "none")
+                .set("align-items", "center")
+                .set("justify-content", "center")
+                .set("cursor", "pointer")
+                .set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)")
+                .set("z-index", "10");
+
+        editButton.addClickListener(e -> {
+            showNotification("Edit functionality coming soon!", false);
+        });
+
+        messageBubble.add(editButton);
+
+        // Show edit button on hover
+        messageBubble.getElement().addEventListener("mouseenter", e -> {
+            editButton.getStyle().set("display", "flex");
+        });
+
+        messageBubble.getElement().addEventListener("mouseleave", e -> {
+            editButton.getStyle().set("display", "none");
+        });
+
+        messageContent.add(messageBubble);
+        messageRow.add(messageContent, userAvatar);
+        messagesContainer.add(messageRow);
+        messageElements.add(messageRow);
+        currentMessageGroup.add(messageRow);
+
+        // Show avatar on this message (it's the current last user message)
         showUserAvatarOnLastMessage();
     }
-    // For bot messages, the avatar visibility is already handled in addBotMessage
-}
+
+    // Helper method to show user avatar only on the last message
+    private void showUserAvatarOnLastMessage() {
+        // Hide all user avatars in current group
+        for (Div messageRow : currentMessageGroup) {
+            messageRow.getChildren()
+                    .filter(component -> component instanceof Div)
+                    .forEach(component -> {
+                        Div div = (Div) component;
+                        if ("👤".equals(div.getText())) {
+                            div.getStyle().set("display", "none");
+                        }
+                    });
+        }
+
+        // Show avatar only on the last message in the group
+        if (!currentMessageGroup.isEmpty()) {
+            Div lastMessageRow = currentMessageGroup.get(currentMessageGroup.size() - 1);
+            lastMessageRow.getChildren()
+                    .filter(component -> component instanceof Div)
+                    .forEach(component -> {
+                        Div div = (Div) component;
+                        if ("👤".equals(div.getText())) {
+                            div.getStyle().set("display", "flex");
+                            // Adjust message content margin
+                            lastMessageRow.getChildren()
+                                    .filter(comp -> comp instanceof Div &&
+                                            comp != div &&
+                                            ((Div) comp).getStyle().get("flex-direction") != null)
+                                    .findFirst()
+                                    .ifPresent(content -> ((Div) content).getStyle().set("margin-right", "0"));
+                        }
+                    });
+        }
+    }
+
+    // Helper method to hide avatars in previous message group
+    private void hideAvatarsInPreviousGroup() {
+        // This method ensures that when switching between bot/user messages,
+        // the previous group's avatars are properly managed
+        if ("user".equals(lastMessageSender)) {
+            // We're switching from user to bot, make sure last user message shows avatar
+            showUserAvatarOnLastMessage();
+        }
+        // For bot messages, the avatar visibility is already handled in addBotMessage
+    }
+
     private void addBotMessage(String text, boolean showAvatar) {
         // Update message group tracking
         if (!"bot".equals(lastMessageSender)) {
@@ -1285,7 +1293,7 @@ private void hideAvatarsInPreviousGroup() {
                 .set("padding", "8px 16px");
 
         findVetsBtn.addClickListener(e -> {
-            showNotification("Searching for emergency veterinarians near you...", false);
+            findNearbyEmergencyVets();
         });
 
         VerticalLayout bannerText = new VerticalLayout(bannerContent, subText);
@@ -1303,6 +1311,118 @@ private void hideAvatarsInPreviousGroup() {
                 .set("background", "#dc2626")
                 .set("color", "white")
                 .set("flex-shrink", "0");
+    }
+
+    public void findNearbyEmergencyVets() {
+        System.out.println("Finding nearby vets with coordinates: " + userLatitude + ", " + userLongitude);
+
+        if (userLatitude == 0.0 && userLongitude == 0.0) {
+            showNotification("Location not available. Please enable location access and refresh the page.", true);
+            return;
+        }
+
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                System.out.println("Making API call to find nearby vets...");
+                String response = ApiClient.postJson(
+                        "http://localhost:8080/api/emergency/nearby-vets",
+                        Map.of(
+                                "latitude", userLatitude,
+                                "longitude", userLongitude,
+                                "radiusKm", 25));
+                System.out.println("API Response: " + response);
+                return response;
+            } catch (Exception ex) {
+                System.err.println("Error finding nearby vets: " + ex.getMessage());
+                ex.printStackTrace(); // Add full stack trace
+                return null;
+            }
+        }).thenAccept(response -> {
+            getUI().ifPresent(ui -> ui.access(() -> {
+                if (response != null) {
+                    System.out.println("Showing dialog with response: " + response);
+                    showNearbyVetsDialog(response);
+                } else {
+                    System.out.println("No response received, showing error notification");
+                    showNotification(
+                            "Unable to find nearby emergency vets. Please search online or call your regular vet.",
+                            true);
+                }
+                ui.push();
+            }));
+        });
+    }
+
+    private void showNearbyVetsDialog(String response) {
+        try {
+            JsonNode jsonResponse = objectMapper.readTree(response);
+            JsonNode nearbyVets = jsonResponse.path("nearbyVets");
+
+            Dialog dialog = new Dialog();
+            dialog.setHeaderTitle("Nearby Emergency Veterinary Clinics");
+            dialog.setWidth("600px");
+            dialog.setHeight("500px");
+
+            VerticalLayout content = new VerticalLayout();
+            content.setPadding(false);
+            content.setSpacing(true);
+
+            if (nearbyVets.isArray() && nearbyVets.size() > 0) {
+                for (JsonNode vetNode : nearbyVets) {
+                    Div vetCard = createVetCard(vetNode);
+                    content.add(vetCard);
+                }
+            } else {
+                content.add(new Span(
+                        "No emergency veterinary clinics found nearby. Please search online or contact your regular veterinarian."));
+            }
+
+            Button closeButton = new Button("Close", e -> dialog.close());
+            closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+            dialog.getFooter().add(closeButton);
+            dialog.add(content);
+            dialog.open();
+
+        } catch (Exception e) {
+            showNotification("Error displaying vet information", true);
+        }
+    }
+
+    @ClientCallable
+    public void triggerEmergency() {
+        findNearbyEmergencyVets();
+    }
+
+    private Div createVetCard(JsonNode vetNode) {
+        Div card = new Div();
+        card.getStyle()
+                .set("border", "1px solid #e5e7eb")
+                .set("border-radius", "8px")
+                .set("padding", "16px")
+                .set("margin-bottom", "12px")
+                .set("background", "white");
+
+        H4 name = new H4(vetNode.path("name").asText("Veterinary Clinic"));
+        name.getStyle().set("margin", "0 0 8px 0").set("color", "#1f2937");
+
+        Span address = new Span(vetNode.path("address").asText("Address not available"));
+        address.getStyle().set("color", "#6b7280").set("font-size", "14px");
+
+        Span phone = new Span("📞 " + vetNode.path("phoneNumber").asText("Contact for phone"));
+        phone.getStyle().set("color", "#374151").set("font-size", "14px");
+
+        double distance = vetNode.path("distanceKm").asDouble(0);
+        Span distanceSpan = new Span(String.format("📍 %.1f km away", distance));
+        distanceSpan.getStyle().set("color", "#059669").set("font-weight", "600").set("font-size", "14px");
+
+        HorizontalLayout info = new HorizontalLayout(phone, distanceSpan);
+        info.setSpacing(true);
+        info.setAlignItems(FlexComponent.Alignment.CENTER);
+
+        card.add(name, address, info);
+
+        return card;
     }
 
     private void showNotification(String message, boolean isError) {
@@ -1360,6 +1480,9 @@ private void hideAvatarsInPreviousGroup() {
         getUI().ifPresent(ui -> {
             ui.access(() -> {
                 messageInput.focus();
+
+                requestUserLocation();
+
                 // Add welcome message after a slight delay to ensure layout is ready
                 ui.getPage().executeJs("setTimeout(() => {}, 50);").then(ignore -> {
                     addWelcomeMessage();
@@ -1452,6 +1575,109 @@ private void hideAvatarsInPreviousGroup() {
         });
     }
 
+    private void showLocationPermissionDialog() {
+        Dialog locationDialog = new Dialog();
+        locationDialog.setHeaderTitle("Location Access Required");
+        locationDialog.setModal(true);
+        locationDialog.setCloseOnEsc(false);
+        locationDialog.setCloseOnOutsideClick(false);
+
+        VerticalLayout content = new VerticalLayout();
+        content.setSpacing(true);
+        content.setPadding(true);
+
+        Icon locationIcon = VaadinIcon.LOCATION_ARROW.create();
+        locationIcon.setSize("40px");
+        locationIcon.setColor("#2563eb");
+
+        H3 title = new H3("Enable Location Access");
+        Paragraph description = new Paragraph(
+                "Virtual Vet needs your location to find nearby emergency veterinary clinics " +
+                        "in case of urgent situations. Your location data is only used for this purpose " +
+                        "and is not stored on our servers.");
+        description.getStyle().set("max-width", "400px");
+
+        Button enableButton = new Button("Enable Location", VaadinIcon.CHECK.create());
+        enableButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        enableButton.addClickListener(e -> {
+            locationDialog.close();
+            requestUserLocation();
+        });
+
+        Button skipButton = new Button("Skip for Now", VaadinIcon.CLOCK.create());
+        skipButton.addClickListener(e -> {
+            locationDialog.close();
+            // Set default coordinates if user skips
+            this.userLatitude = 45.4215;
+            this.userLongitude = -75.6972;
+            showNotification("Using default location. You can enable location access later.", false);
+        });
+
+        HorizontalLayout buttons = new HorizontalLayout(enableButton, skipButton);
+        buttons.setSpacing(true);
+
+        content.add(locationIcon, title, description, buttons);
+        content.setAlignItems(Alignment.CENTER);
+        locationDialog.add(content);
+
+        locationDialog.open();
+    }
+
+    private void requestUserLocation() {
+        System.out.println("Requesting user location...");
+        getUI().ifPresent(ui -> {
+            ui.getPage().executeJs(
+                    """
+                            if (navigator.geolocation) {
+                                navigator.geolocation.getCurrentPosition(
+                                    function(position) {
+                                        $0.$server.onLocationReceived(position.coords.latitude, position.coords.longitude);
+                                    },
+                                    function(error) {
+                                        console.log('Location error:', error);
+                                        let errorMsg = "Unable to access your location";
+                                        if (error.code === error.PERMISSION_DENIED) {
+                                            errorMsg = "Location access was denied. Please enable location permissions in your browser settings.";
+                                        } else if (error.code === error.POSITION_UNAVAILABLE) {
+                                            errorMsg = "Location information is unavailable.";
+                                        } else if (error.code === error.TIMEOUT) {
+                                            errorMsg = "Location request timed out.";
+                                        }
+                                        $0.$server.onLocationError(errorMsg);
+                                    },
+                                    {
+                                        enableHighAccuracy: true,
+                                        timeout: 15000,
+                                        maximumAge: 300000
+                                    }
+                                );
+                            } else {
+                                $0.$server.onLocationError("Geolocation is not supported by this browser");
+                            }
+                            """,
+                    getElement());
+        });
+    }
+
+    @ClientCallable
+    public void onLocationReceived(double latitude, double longitude) {
+        // Store user location for emergency vet searches
+        this.userLatitude = latitude;
+        this.userLongitude = longitude;
+
+        showNotification("Location detected for emergency vet search", false);
+        System.out.println("User location: " + latitude + ", " + longitude);
+    }
+
+    @ClientCallable
+    public void onLocationError(String error) {
+        System.err.println("Location error: " + error);
+
+        // Set default coordinates (you can customize this for your area)
+        this.userLatitude = 45.4215; // Ottawa coordinates as default
+        this.userLongitude = -75.6972;
+    }
+
     private static class UploadedFileData {
         private final String filename;
         private final String contentType;
@@ -1482,7 +1708,6 @@ private void hideAvatarsInPreviousGroup() {
 
     // Add these fields to ChatView class
     private List<ConversationMessage> conversationHistory = new ArrayList<>();
-
 
     // Add this inner class
     private static class ConversationMessage {

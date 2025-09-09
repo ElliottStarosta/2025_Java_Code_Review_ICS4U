@@ -9,39 +9,35 @@
       "name": "ai.hack-club",
       "type": "com.virtualvet.config.AIServiceConfig$HackClub",
       "sourceType": "com.virtualvet.config.AIServiceConfig",
-      "sourceMethod": "getHackClub()"
+      "sourceMethod": "public com.virtualvet.config.AIServiceConfig.HackClub getHackClub() "
     },
     {
       "name": "ai.image-analysis",
       "type": "com.virtualvet.config.AIServiceConfig$ImageAnalysis",
       "sourceType": "com.virtualvet.config.AIServiceConfig",
-      "sourceMethod": "getImageAnalysis()"
+      "sourceMethod": "public com.virtualvet.config.AIServiceConfig.ImageAnalysis getImageAnalysis() "
     }
   ],
   "properties": [
     {
       "name": "ai.hack-club.api-url",
       "type": "java.lang.String",
-      "sourceType": "com.virtualvet.config.AIServiceConfig$HackClub",
-      "defaultValue": "https:\/\/ai.hackclub.com\/chat\/completions"
+      "sourceType": "com.virtualvet.config.AIServiceConfig$HackClub"
     },
     {
       "name": "ai.image-analysis.huggingface-url",
       "type": "java.lang.String",
-      "sourceType": "com.virtualvet.config.AIServiceConfig$ImageAnalysis",
-      "defaultValue": "https:\/\/api-inference.huggingface.co\/models"
+      "sourceType": "com.virtualvet.config.AIServiceConfig$ImageAnalysis"
     },
     {
       "name": "ai.image-analysis.model",
       "type": "java.lang.String",
-      "sourceType": "com.virtualvet.config.AIServiceConfig$ImageAnalysis",
-      "defaultValue": "Salesforce\/blip-image-captioning-base"
+      "sourceType": "com.virtualvet.config.AIServiceConfig$ImageAnalysis"
     },
     {
       "name": "ai.image-analysis.service",
       "type": "java.lang.String",
-      "sourceType": "com.virtualvet.config.AIServiceConfig$ImageAnalysis",
-      "defaultValue": "huggingface"
+      "sourceType": "com.virtualvet.config.AIServiceConfig$ImageAnalysis"
     }
   ],
   "hints": []

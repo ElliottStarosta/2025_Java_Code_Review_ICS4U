@@ -128,46 +128,59 @@ public class StructuredVetResponse {
         this.nextSteps = nextSteps;
     }
 
+    private List<String> identifiedSymptoms = new ArrayList<>();
+
+    public List<String> getIdentifiedSymptoms() {
+        return identifiedSymptoms;
+    }
+
+    public void setIdentifiedSymptoms(List<String> identifiedSymptoms) {
+        this.identifiedSymptoms = identifiedSymptoms;
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("StructuredVetResponse{");
         sb.append("\n  urgency='").append(urgency).append("'");
         sb.append("\n  assessment='").append(assessment).append("'");
-        
+
         if (!messages.isEmpty()) {
             sb.append("\n  messages=[");
             for (int i = 0; i < messages.size(); i++) {
                 sb.append("\n    ").append(messages.get(i).toString());
-                if (i < messages.size() - 1) sb.append(",");
+                if (i < messages.size() - 1)
+                    sb.append(",");
             }
             sb.append("\n  ]");
         } else {
             sb.append("\n  messages=[]");
         }
-        
+
         if (!lists.isEmpty()) {
             sb.append("\n  lists=[");
             for (int i = 0; i < lists.size(); i++) {
                 sb.append("\n    ").append(lists.get(i).toString());
-                if (i < lists.size() - 1) sb.append(",");
+                if (i < lists.size() - 1)
+                    sb.append(",");
             }
             sb.append("\n  ]");
         } else {
             sb.append("\n  lists=[]");
         }
-        
+
         if (!recommendations.isEmpty()) {
             sb.append("\n  recommendations=[");
             for (int i = 0; i < recommendations.size(); i++) {
                 sb.append("\n    ").append(recommendations.get(i).toString());
-                if (i < recommendations.size() - 1) sb.append(",");
+                if (i < recommendations.size() - 1)
+                    sb.append(",");
             }
             sb.append("\n  ]");
         } else {
             sb.append("\n  recommendations=[]");
         }
-        
+
         sb.append("\n  questions=").append(questions);
         sb.append("\n  warnings=").append(warnings);
         sb.append("\n  nextSteps='").append(nextSteps).append("'");
@@ -175,7 +188,7 @@ public class StructuredVetResponse {
         sb.append("\n  vetContactTimeframe='").append(vetContactTimeframe).append("'");
         sb.append("\n  vetContactReason='").append(vetContactReason).append("'");
         sb.append("\n}");
-        
+
         return sb.toString();
     }
 
@@ -227,11 +240,11 @@ public class StructuredVetResponse {
         @Override
         public String toString() {
             return "ResponseMessage{" +
-                   "type='" + type + "', " +
-                   "content='" + content + "', " +
-                   "emphasis='" + emphasis + "', " +
-                   "delay=" + delay +
-                   "}";
+                    "type='" + type + "', " +
+                    "content='" + content + "', " +
+                    "emphasis='" + emphasis + "', " +
+                    "delay=" + delay +
+                    "}";
         }
     }
 
@@ -272,10 +285,10 @@ public class StructuredVetResponse {
         @Override
         public String toString() {
             return "ResponseList{" +
-                   "title='" + title + "', " +
-                   "type='" + type + "', " +
-                   "items=" + items +
-                   "}";
+                    "title='" + title + "', " +
+                    "type='" + type + "', " +
+                    "items=" + items +
+                    "}";
         }
     }
 
@@ -316,10 +329,10 @@ public class StructuredVetResponse {
         @Override
         public String toString() {
             return "Recommendation{" +
-                   "action='" + action + "', " +
-                   "timeframe='" + timeframe + "', " +
-                   "priority='" + priority + "'" +
-                   "}";
+                    "action='" + action + "', " +
+                    "timeframe='" + timeframe + "', " +
+                    "priority='" + priority + "'" +
+                    "}";
         }
     }
 }
