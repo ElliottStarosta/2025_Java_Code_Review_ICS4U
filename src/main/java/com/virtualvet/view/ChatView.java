@@ -503,7 +503,6 @@ public class ChatView extends VerticalLayout {
                                 System.out.println("Bot response: " + responseText);
                                 List<String> messages = splitIntoMessages(responseText);
                                 addBotMessages(messages);
-                                checkForEmergency(responseText);
                                 setInputEnabled(true);
                                 messageInput.focus();
                                 scrollToBottom();
@@ -1256,63 +1255,7 @@ public class ChatView extends VerticalLayout {
         }
     }
 
-    private void checkForEmergency(String responseText) {
-        if (responseText != null && (responseText.toLowerCase().contains("emergency") ||
-                responseText.toLowerCase().contains("urgent") ||
-                responseText.toLowerCase().contains("immediately"))) {
-            showEmergencyBanner();
-        }
-    }
-
-    private void showEmergencyBanner() {
-        emergencyBanner.removeAll();
-        emergencyBanner.setVisible(true);
-
-        Div bannerContent = new Div();
-        bannerContent.setText("🚨 Emergency Situation Detected");
-        bannerContent.getStyle()
-                .set("color", "white")
-                .set("font-weight", "600")
-                .set("font-size", "16px");
-
-        Div subText = new Div();
-        subText.setText("Contact your veterinarian immediately!");
-        subText.getStyle()
-                .set("color", "rgba(255, 255, 255, 0.9)")
-                .set("font-size", "14px")
-                .set("margin-top", "4px");
-
-        Button findVetsBtn = new Button("Find Emergency Vets");
-        findVetsBtn.addThemeVariants(ButtonVariant.LUMO_CONTRAST);
-        findVetsBtn.getStyle()
-                .set("background", "white")
-                .set("color", "#dc2626")
-                .set("border", "none")
-                .set("font-weight", "600")
-                .set("border-radius", "8px")
-                .set("padding", "8px 16px");
-
-        findVetsBtn.addClickListener(e -> {
-            findNearbyEmergencyVets();
-        });
-
-        VerticalLayout bannerText = new VerticalLayout(bannerContent, subText);
-        bannerText.setPadding(false);
-        bannerText.setSpacing(false);
-
-        HorizontalLayout banner = new HorizontalLayout(bannerText, findVetsBtn);
-        banner.setWidthFull();
-        banner.setAlignItems(FlexComponent.Alignment.CENTER);
-        banner.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
-        banner.setPadding(true);
-
-        emergencyBanner.add(banner);
-        emergencyBanner.getStyle()
-                .set("background", "#dc2626")
-                .set("color", "white")
-                .set("flex-shrink", "0");
-    }
-
+    
     public void findNearbyEmergencyVets() {
         System.out.println("Finding nearby vets with coordinates: " + userLatitude + ", " + userLongitude);
 
@@ -1341,7 +1284,6 @@ public class ChatView extends VerticalLayout {
             getUI().ifPresent(ui -> ui.access(() -> {
                 if (response != null) {
                     System.out.println("Showing dialog with response: " + response);
-                    showNearbyVetsDialog(response);
                 } else {
                     System.out.println("No response received, showing error notification");
                     showNotification(
@@ -1353,77 +1295,12 @@ public class ChatView extends VerticalLayout {
         });
     }
 
-    private void showNearbyVetsDialog(String response) {
-        try {
-            JsonNode jsonResponse = objectMapper.readTree(response);
-            JsonNode nearbyVets = jsonResponse.path("nearbyVets");
-
-            Dialog dialog = new Dialog();
-            dialog.setHeaderTitle("Nearby Emergency Veterinary Clinics");
-            dialog.setWidth("600px");
-            dialog.setHeight("500px");
-
-            VerticalLayout content = new VerticalLayout();
-            content.setPadding(false);
-            content.setSpacing(true);
-
-            if (nearbyVets.isArray() && nearbyVets.size() > 0) {
-                for (JsonNode vetNode : nearbyVets) {
-                    Div vetCard = createVetCard(vetNode);
-                    content.add(vetCard);
-                }
-            } else {
-                content.add(new Span(
-                        "No emergency veterinary clinics found nearby. Please search online or contact your regular veterinarian."));
-            }
-
-            Button closeButton = new Button("Close", e -> dialog.close());
-            closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-
-            dialog.getFooter().add(closeButton);
-            dialog.add(content);
-            dialog.open();
-
-        } catch (Exception e) {
-            showNotification("Error displaying vet information", true);
-        }
-    }
 
     @ClientCallable
     public void triggerEmergency() {
         findNearbyEmergencyVets();
     }
 
-    private Div createVetCard(JsonNode vetNode) {
-        Div card = new Div();
-        card.getStyle()
-                .set("border", "1px solid #e5e7eb")
-                .set("border-radius", "8px")
-                .set("padding", "16px")
-                .set("margin-bottom", "12px")
-                .set("background", "white");
-
-        H4 name = new H4(vetNode.path("name").asText("Veterinary Clinic"));
-        name.getStyle().set("margin", "0 0 8px 0").set("color", "#1f2937");
-
-        Span address = new Span(vetNode.path("address").asText("Address not available"));
-        address.getStyle().set("color", "#6b7280").set("font-size", "14px");
-
-        Span phone = new Span("📞 " + vetNode.path("phoneNumber").asText("Contact for phone"));
-        phone.getStyle().set("color", "#374151").set("font-size", "14px");
-
-        double distance = vetNode.path("distanceKm").asDouble(0);
-        Span distanceSpan = new Span(String.format("📍 %.1f km away", distance));
-        distanceSpan.getStyle().set("color", "#059669").set("font-weight", "600").set("font-size", "14px");
-
-        HorizontalLayout info = new HorizontalLayout(phone, distanceSpan);
-        info.setSpacing(true);
-        info.setAlignItems(FlexComponent.Alignment.CENTER);
-
-        card.add(name, address, info);
-
-        return card;
-    }
 
     private void showNotification(String message, boolean isError) {
         Notification notification = Notification.show(message, 3000, Notification.Position.TOP_CENTER);

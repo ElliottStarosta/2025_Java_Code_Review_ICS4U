@@ -143,10 +143,7 @@ public class ChatService {
             }
             response.setRecommendations(generateRecommendations(response.getUrgencyLevel(), context, imageAnalyses));
 
-            if (response.getUrgencyLevel().isEmergency()) {
-                response.setNearbyVets(emergencyService.findNearbyVets(0.0, 0.0, 25));
-            }
-
+           
             response.addContextValue("animalType",
                     context.getAnimalProfile() != null ? context.getAnimalProfile().getAnimalType() : null);
             response.addContextValue("symptomsIdentified", context.getIdentifiedSymptoms());
