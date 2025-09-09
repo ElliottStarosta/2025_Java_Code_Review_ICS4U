@@ -19,8 +19,6 @@ public class ChatResponse {
     @JsonProperty("recommendations")
     private List<String> recommendations;
 
-    @JsonProperty("needsEmergencyCare")
-    private boolean needsEmergencyCare;
 
     @JsonProperty("nearbyVets")
     private List<VetLocation> nearbyVets;
@@ -63,7 +61,6 @@ public class ChatResponse {
 
     public void setUrgencyLevel(UrgencyLevel urgencyLevel) {
         this.urgencyLevel = urgencyLevel;
-        this.needsEmergencyCare = urgencyLevel.isEmergency();
     }
 
     public List<String> getRecommendations() {
@@ -74,13 +71,6 @@ public class ChatResponse {
         this.recommendations = recommendations;
     }
 
-    public boolean isNeedsEmergencyCare() {
-        return needsEmergencyCare;
-    }
-
-    public void setNeedsEmergencyCare(boolean needsEmergencyCare) {
-        this.needsEmergencyCare = needsEmergencyCare;
-    }
 
     public List<VetLocation> getNearbyVets() {
         return nearbyVets;
