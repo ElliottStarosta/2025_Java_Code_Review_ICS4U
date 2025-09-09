@@ -33,6 +33,7 @@ public class VetChatApplication {
     private static final Logger logger = LoggerFactory.getLogger(VetChatApplication.class);
 
     public static void main(String[] args) {
+        System.setProperty("vaadin.disableMessageSecurity", "true");
         SpringApplication.run(VetChatApplication.class, args);
     }
 

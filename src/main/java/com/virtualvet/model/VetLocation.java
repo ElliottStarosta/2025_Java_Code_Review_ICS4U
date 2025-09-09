@@ -21,6 +21,18 @@ public class VetLocation {
         this.latitude = latitude;
         this.longitude = longitude;
     }
+
+    public VetLocation(VetLocation other) {
+        this.name = other.name;
+        this.address = other.address;
+        this.phone = other.phone;
+        this.latitude = other.latitude;
+        this.longitude = other.longitude;
+        this.distanceKm = other.distanceKm;
+        this.isEmergencyClinic = other.isEmergencyClinic;
+        this.operatingHours = other.operatingHours;
+        this.rating = other.rating;
+    }
     
     // Getters and Setters
     public String getName() { return name; }

@@ -82,6 +82,51 @@ public class AnimalProfileService {
         }
     }
 
+    public AnimalProfile addSymptomsToProfile(String sessionId, List<String> newSymptoms) {
+        try {
+            if (newSymptoms == null || newSymptoms.isEmpty()) {
+                return getProfileBySessionId(sessionId);
+            }
+
+            AnimalProfile profile = getProfileBySessionId(sessionId);
+            if (profile == null) {
+                // Create a new profile if none exists
+                Optional<Conversation> conversation = conversationRepository.findBySessionId(sessionId);
+                if (conversation.isPresent()) {
+                    profile = new AnimalProfile(conversation.get());
+                    profile = animalProfileRepository.save(profile);
+                } else {
+                    return null;
+                }
+            }
+
+            // Get existing symptoms
+            Set<String> existingSymptoms = new HashSet<>();
+            if (profile.getSymptoms() != null && !profile.getSymptoms().trim().isEmpty()) {
+                existingSymptoms.addAll(Arrays.asList(profile.getSymptoms().split(",\\s*")));
+            }
+
+            // Add new symptoms (deduplicated)
+            for (String symptom : newSymptoms) {
+                if (symptom != null && !symptom.trim().isEmpty()) {
+                    existingSymptoms.add(symptom.trim().toLowerCase());
+                }
+            }
+
+            // Update profile with combined symptoms
+            String updatedSymptoms = existingSymptoms.stream()
+                    .filter(s -> s != null && !s.trim().isEmpty())
+                    .collect(Collectors.joining(", "));
+
+            profile.setSymptoms(updatedSymptoms);
+            return animalProfileRepository.save(profile);
+
+        } catch (Exception e) {
+            System.err.println("Error adding symptoms to profile: " + e.getMessage());
+            return null;
+        }
+    }
+
     private void extractAnimalInfo(AnimalProfile profile, String message) {
         String lowerMessage = message.toLowerCase();
 

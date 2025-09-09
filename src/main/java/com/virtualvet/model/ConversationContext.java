@@ -35,7 +35,7 @@ public class ConversationContext {
     }
 
     public AnimalProfile getAnimalProfile() {
-        return animalProfile;
+        return animalProfile != null ? animalProfile : new AnimalProfile();
     }
 
     public void setAnimalProfile(AnimalProfile animalProfile) {
@@ -43,7 +43,7 @@ public class ConversationContext {
     }
 
     public List<String> getIdentifiedSymptoms() {
-        return identifiedSymptoms;
+        return identifiedSymptoms != null ? identifiedSymptoms : new ArrayList<>();
     }
 
     public void setIdentifiedSymptoms(List<String> identifiedSymptoms) {
@@ -51,7 +51,7 @@ public class ConversationContext {
     }
 
     public UrgencyLevel getCurrentUrgency() {
-        return currentUrgency;
+        return currentUrgency != null ? currentUrgency : UrgencyLevel.LOW;
     }
 
     public void setCurrentUrgency(UrgencyLevel currentUrgency) {
@@ -59,7 +59,7 @@ public class ConversationContext {
     }
 
     public List<Message> getRecentHistory() {
-        return recentHistory;
+        return recentHistory != null ? recentHistory : new ArrayList<>();
     }
 
     public void setRecentHistory(List<Message> recentHistory) {
