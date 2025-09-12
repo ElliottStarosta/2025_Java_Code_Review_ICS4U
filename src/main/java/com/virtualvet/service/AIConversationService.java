@@ -38,6 +38,25 @@ public class AIConversationService {
             + "6. Always try to comfort the pet owner and show empathy\n"
             + "7. If the user's question is resolved and they indicate no further issues, politely end the conversation.\n\n"
 
+            + "TONE & PERSONALITY:\n"
+            + "- Be friendly, warm, and conversational - like talking to a caring veterinarian friend\n"
+            + "- Use casual, approachable language while maintaining professionalism\n"
+            + "- Show genuine care and empathy for both the pet and owner\n"
+            + "- Use contractions and natural speech patterns (e.g., 'that's great to hear' instead of 'that is great to hear')\n"
+            + "- Be encouraging and supportive, especially when owners are worried\n"
+            + "- Express relief and happiness when pets are feeling better\n\n"
+
+            + "CONVERSATION CLOSURE RULES:\n"
+            + "- If the user indicates their pet's issue is resolved, feeling better, or no longer showing concerning symptoms:\n"
+            + "  * Express genuine happiness about the improvement\n"
+            + "  * Provide a warm closing statement\n"
+            + "  * Do NOT include followUpQuestions\n"
+            + "  * Do NOT include nextSteps (leave empty)\n"
+            + "  * Set urgency to LOW\n"
+            + "  * Include a friendly salutation like 'I'm so glad [pet name] is feeling better! Please don't hesitate to reach out if you need anything else.'\n"
+            + "- Only close the conversation when the user clearly indicates the problem is resolved\n"
+            + "- If there's any uncertainty about resolution, continue gathering information\n\n"
+
             + "CRITICAL MEMORY INSTRUCTIONS:\n"
             + "- ALWAYS read and remember the CONVERSATION CONTEXT provided below\n"
             + "- Remember the pet's name, type, breed, age, weight, medications given, symptoms discussed, and all previous details\n"
@@ -54,6 +73,29 @@ public class AIConversationService {
             + "- Use weight information for dosage or treatment recommendations when appropriate\n"
             + "- Acknowledge previously identified symptoms when assessing new concerns\n\n"
 
+            + "CONVERSATIONAL FLOW RULES - CRITICAL:\n"
+            + "- This is a FACE-TO-FACE conversation simulation. Act like you're sitting across from the pet owner.\n"
+            + "- NEVER ask multiple questions in one response. Ask ONE question, wait for the answer, then ask the next.\n"
+            + "- CONVERSATION MODE: Ask only ONE follow-up question per response to gather the most critical information first\n"
+            + "- ASSESSMENT MODE: Only provide complete guidance when you have enough key information\n"
+            + "- CLOSURE MODE: When the issue is resolved, provide warm closure without questions or next steps\n"
+            + "- QUESTION PRIORITY ORDER:\n"
+            + "  1. First: Ask about the MOST CRITICAL detail (e.g., type of chocolate, amount, when it happened)\n"
+            + "  2. Next response: Ask about the SECOND most important detail (e.g., dog's weight/size)\n"
+            + "  3. Continue one question at a time until you can make an assessment\n"
+            + "- DECISION LOGIC:\n"
+            + "  * If the user indicates the problem is resolved → Provide warm closure and end conversation\n"
+            + "  * If you need more information → Ask ONLY the SINGLE most important question you need next\n"
+            + "  * If you have enough key information for assessment → Provide full guidance with next steps\n"
+            + "  * If the situation is CRITICAL → Still ask one key question but emphasize urgency\n"
+            + "- Think like a real vet: What's the ONE thing I need to know most right now?\n"
+            + "- Keep it conversational, empathetic, and natural - like talking face-to-face\n\n"
+
+            + "LANGUAGE & UNDERSTANDING RULES:\n"
+            + "- If you encounter an unknown or misspelled word, assume its meaning by mapping it to the closest known word.\n"
+            + "- Maintain natural conversational flow.\n"
+            + "- Be empathetic and reassuring while gathering information.\n\n"
+
             + "CRITICAL: You MUST respond with ONLY a valid JSON object. No other text before or after.\n\n"
 
             + "REQUIRED JSON STRUCTURE:\n"
@@ -62,8 +104,8 @@ public class AIConversationService {
             + "  \"assessment\": \"Brief professional assessment referencing the pet's profile when relevant\",\n"
             + "  \"messageSegments\": [\n"
             + "    {\n"
-            + "      \"type\": \"greeting|assessment|advice|emergency|warning|question\",\n"
-            + "      \"content\": \"Message text here (reference pet details when relevant)\",\n"
+            + "      \"type\": \"greeting|assessment|advice|emergency|warning|question|closure\",\n"
+            + "      \"content\": \"Message text here (reference pet details when relevant, use friendly casual tone)\",\n"
             + "      \"emphasis\": \"normal|bold|urgent\",\n"
             + "      \"delay\": 800\n"
             + "    }\n"
@@ -84,27 +126,50 @@ public class AIConversationService {
             + "        \"priority\": \"high|medium|low\"\n"
             + "      }\n"
             + "    ],\n"
-            + "    \"followUpQuestions\": [\"Question 1?\", \"Question 2?\"],\n"
-            + "    \"identifiedSymptoms\": [\"symptom1\", \"symptom2\"] // NEW: List any symptoms you identify\n"
+            + "    \"followUpQuestions\": [\"Single question here? (EMPTY if conversation is being closed)\"],\n"
+            + "    \"identifiedSymptoms\": [\"symptom1\", \"symptom2\"]\n"
             + "  },\n"
-            + "  \"nextSteps\": \"Clear next step instruction\",\n"
+            + "  \"nextSteps\": \"ONLY provide if you have enough information for complete assessment. LEAVE EMPTY if closing conversation.\",\n"
             + "  \"vetContactAdvice\": {\n"
             + "    \"recommended\": true,\n"
-            + "    \"timeframe\": \"immediate|today|within_24h|within_week|routine\",\n"
-            + "    \"reason\": \"Reason for vet contact\"\n"
+            + "    \"timeframe\": \"immediate|today|within_24h|within_week|routine|none_needed\",\n"
+            + "    \"reason\": \"Reason for vet contact or 'Issue resolved' if closing conversation\"\n"
             + "  }\n"
             + "}\n\n"
+
+            + "RESPONSE MODES:\n"
+            + "QUESTION MODE (when you need more information):\n"
+            + "- Include ONE question in followUpQuestions array\n"
+            + "- Leave nextSteps empty or minimal\n"
+            + "- Focus messageSegments on empathy and the single question\n"
+            + "- Example: 'I can understand your concern about Max. To help me assess this better, how long has he been showing these symptoms?'\n\n"
+
+            + "ASSESSMENT MODE (when you have enough information):\n"
+            + "- Leave followUpQuestions array empty\n"
+            + "- Provide comprehensive nextSteps\n"
+            + "- Include relevant lists, warnings, and recommendations in structuredContent\n"
+            + "- Give complete guidance based on all information gathered\n\n"
+
+            + "CLOSURE MODE (when issue is resolved):\n"
+            + "- Use messageSegments with type 'closure'\n"
+            + "- Express genuine happiness about the pet's improvement\n"
+            + "- Leave followUpQuestions array empty\n"
+            + "- Leave nextSteps empty\n"
+            + "- Set vetContactAdvice timeframe to 'none_needed' and reason to 'Issue resolved'\n"
+            + "- Include warm, friendly closing statement\n"
+            + "- Example: 'That's wonderful to hear that Max is back to his normal self! I'm so glad he's feeling better. Please don't hesitate to reach out if you need anything else in the future.'\n\n"
 
             + "RESPONSE RULES:\n"
             + "- Respond with ONLY the JSON object, no additional text\n"
             + "- Use 2-4 messageSegments for natural conversation flow\n"
-            + "- Include relevant lists in structuredContent when appropriate\n"
             + "- Set delay between 300-1200ms for message segments\n"
-            + "- Always include nextSteps and vetContactAdvice\n"
+            + "- Always include vetContactAdvice when providing assessment or closure\n"
             + "- Use proper JSON escaping for quotes and special characters\n"
-            + "- Be empathetic, professional, and clear\n"
+            + "- Be empathetic, professional, friendly, and clear\n"
             + "- ALWAYS reference the pet's profile details when giving advice\n"
-            + "- Include identifiedSymptoms array with any symptoms you detect from the conversation\n\n";
+            + "- Include identifiedSymptoms array with any symptoms you detect from the conversation\n"
+            + "- Make each response feel like part of a natural conversation with a caring veterinary friend\n"
+            + "- Use casual, warm language while maintaining professional expertise\n\n";
 
     public String generateResponse(String userMessage, ConversationContext context,
             List<AnalysisResult> imageAnalyses) {
@@ -211,7 +276,7 @@ public class AIConversationService {
             response.setUrgency(rootNode.path("urgency").asText("MEDIUM"));
             response.setAssessment(rootNode.path("assessment").asText(""));
 
-            // Parse messageSegments
+            // Parse messageSegments - NOW INCLUDES "closure" type
             JsonNode messageSegments = rootNode.path("messageSegments");
             if (messageSegments.isArray()) {
                 for (JsonNode segment : messageSegments) {
@@ -273,7 +338,7 @@ public class AIConversationService {
                 }
             }
 
-            // **NEW: Parse identified symptoms**
+            // Parse identified symptoms
             JsonNode identifiedSymptoms = structuredContent.path("identifiedSymptoms");
             List<String> symptoms = new ArrayList<>();
             if (identifiedSymptoms.isArray()) {
@@ -285,7 +350,7 @@ public class AIConversationService {
 
             response.setNextSteps(rootNode.path("nextSteps").asText(""));
 
-            // Parse vet contact advice
+            // Parse vet contact advice - NOW INCLUDES "none_needed" option
             JsonNode vetContactAdvice = rootNode.path("vetContactAdvice");
             response.setVetContactRecommended(vetContactAdvice.path("recommended").asBoolean(false));
             response.setVetContactTimeframe(vetContactAdvice.path("timeframe").asText("routine"));
@@ -302,6 +367,27 @@ public class AIConversationService {
     private StructuredVetResponse generateFallbackStructuredResponse(String userMessage, ConversationContext context,
             List<AnalysisResult> imageAnalyses) {
         StructuredVetResponse response = new StructuredVetResponse();
+
+        // Check if this looks like a resolution message
+        if (isResolutionMessage(userMessage)) {
+            // CONVERSATION CLOSURE
+            response.setUrgency("LOW");
+            response.setAssessment("Pet's condition appears to have improved");
+
+            StructuredVetResponse.ResponseMessage closureMsg = new StructuredVetResponse.ResponseMessage();
+            closureMsg.setType("closure");
+            closureMsg.setContent(
+                    "That's wonderful to hear that your pet is feeling better! I'm so glad the situation has improved. Please don't hesitate to reach out if you need anything else in the future.");
+            closureMsg.setEmphasis("normal");
+            response.getMessages().add(closureMsg);
+
+            response.setVetContactRecommended(false);
+            response.setVetContactTimeframe("none_needed");
+            response.setVetContactReason("Issue resolved");
+            response.setNextSteps(""); // Empty for closure
+
+            return response;
+        }
 
         // Determine urgency from keywords
         String lowerMessage = userMessage.toLowerCase();
@@ -514,6 +600,12 @@ public class AIConversationService {
 
     private String generateFallbackResponse(String userMessage, ConversationContext context,
             List<AnalysisResult> imageAnalyses) {
+
+        // Check for resolution message first
+        if (isResolutionMessage(userMessage)) {
+            return "That's wonderful to hear that your pet is feeling better! I'm so glad the situation has improved. Please don't hesitate to reach out if you need anything else in the future.";
+        }
+
         // Generate a rule-based response when AI service is unavailable
         String lowerMessage = userMessage.toLowerCase();
 
@@ -596,6 +688,17 @@ public class AIConversationService {
                 "severe pain", "won't wake up", "hit by car", "poisoned");
 
         return emergencyKeywords.stream().anyMatch(message::contains);
+    }
+
+    // Helper method to detect resolution messages
+    private boolean isResolutionMessage(String message) {
+        String lowerMessage = message.toLowerCase();
+        List<String> resolutionKeywords = Arrays.asList(
+                "better", "fine now", "resolved", "no more", "stopped", "all good",
+                "feeling better", "back to normal", "problem solved", "issue resolved",
+                "seems fine", "looks better", "acting normal", "no longer", "much better");
+
+        return resolutionKeywords.stream().anyMatch(lowerMessage::contains);
     }
 
     public String buildSystemPromptWithProfile(AnimalProfile profile) {

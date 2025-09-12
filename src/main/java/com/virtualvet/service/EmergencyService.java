@@ -72,7 +72,7 @@ public class EmergencyService {
     private List<VetLocation> getDefaultVetsWithinRadius(double latitude, double longitude, int radiusKm) {
         logger.info("Using default vet locations for search");
         List<VetLocation> nearbyVets = new ArrayList<>();
-        
+            
         for (VetLocation vet : defaultEmergencyVets) {
             try {
 

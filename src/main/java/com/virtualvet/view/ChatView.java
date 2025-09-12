@@ -2,7 +2,12 @@ package com.virtualvet.view;
 
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.ClientCallable;
+import com.vaadin.flow.component.ComponentUtil;
 import com.vaadin.flow.component.Key;
+import com.vaadin.flow.component.KeyModifier;
+import com.vaadin.flow.component.KeyPressEvent;
+import com.vaadin.flow.component.ShortcutRegistration;
+import com.vaadin.flow.component.Shortcuts;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -32,6 +37,8 @@ import com.vaadin.flow.component.upload.receivers.MultiFileMemoryBuffer;
 import com.vaadin.flow.function.SerializableRunnable;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,7 +47,6 @@ import org.springframework.core.io.ByteArrayResource;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -61,6 +67,11 @@ public class ChatView extends VerticalLayout {
     private List<UploadedFileData> uploadedFiles = new ArrayList<>();
 
     private String lastMessageSender = null; // Track who sent the last message
+    private AtomicBoolean enterPressed = new AtomicBoolean(false);
+    private AtomicLong lastEnterTime = new AtomicLong(0);
+    private long debounceMillis = 300; // adjust to taste (300ms = 0.3 sec)
+    private String temporaryMessage = null;
+
     private List<Div> currentMessageGroup = new ArrayList<>(); // Track current message group
 
     private StructuredVetResponse lastStructuredResponse;
@@ -74,7 +85,6 @@ public class ChatView extends VerticalLayout {
     private double userLongitude = 0.0;
 
     private String currentSessionId;
-    private Div emergencyBanner;
     private boolean isWaitingForResponse = false;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private List<Div> messageElements = new ArrayList<>();
@@ -91,9 +101,6 @@ public class ChatView extends VerticalLayout {
     }
 
     private void createComponents() {
-        // Emergency banner (hidden by default)
-        emergencyBanner = new Div();
-        emergencyBanner.setVisible(false);
 
         // Messages container - phone-like chat
         messagesContainer = new VerticalLayout();
@@ -149,12 +156,57 @@ public class ChatView extends VerticalLayout {
         messageInput.addBlurListener(e -> messageInput.getStyle()
                 .set("border-color", "#d1d5db")
                 .set("background", "#f9fafb"));
+        Shortcuts.addShortcutListener(
+                messageInput,
+                event -> {
+                    long now = System.currentTimeMillis();
+                    long last = lastEnterTime.get();
 
-        // messageInput.addKeyDownListener(Key.ENTER, e -> {
-        // if (!e.isShiftKey()) {
-        // sendMessage();
-        // }
-        // });
+                    if (now - last > debounceMillis) {
+                        lastEnterTime.set(now);
+
+                        // Use JavaScript to handle the Enter key properly
+                        messageInput.getElement().executeJs("""
+                                    // Prevent default behavior and stop propagation
+                                    if (event) {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        event.stopImmediatePropagation();
+                                    }
+
+                                    // Get the textarea element
+                                    const textarea = this.querySelector('textarea');
+                                    if (!textarea) return;
+
+                                    // Get current cursor position
+                                    const cursorPos = textarea.selectionStart;
+                                    const textBefore = textarea.value.substring(0, cursorPos);
+                                    const textAfter = textarea.value.substring(cursorPos);
+
+                                    // Check if Shift is pressed - allow new line
+                                    if (event.shiftKey) {
+                                        // Insert new line at cursor position
+                                        textarea.value = textBefore + '\\n' + textAfter;
+                                        // Move cursor to after the new line
+                                        textarea.selectionStart = cursorPos + 1;
+                                        textarea.selectionEnd = cursorPos + 1;
+                                        // Trigger input event to update Vaadin
+                                        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                                    } else {
+                                        // Regular Enter - send message
+                                        const message = textarea.value.trim();
+                                        if (message) {
+                                            // Clear the textarea
+                                            textarea.value = '';
+                                            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                                            // Send to server
+                                            $0.$server.sendMessageFromJS(message);
+                                        }
+                                    }
+                                """, getElement());
+                    }
+                },
+                Key.ENTER).listenOn(messageInput);
 
         // File upload component
         multiFileBuffer = new MultiFileMemoryBuffer();
@@ -177,7 +229,7 @@ public class ChatView extends VerticalLayout {
 
                 getUI().ifPresent(ui -> ui.access(() -> {
                     showImagePreview(fileData);
-                    showNotification("Image attached: " + fileName, false);
+
                     ui.push();
                 }));
             } catch (Exception ex) {
@@ -253,11 +305,12 @@ public class ChatView extends VerticalLayout {
 
         // File upload event handlers
         upload.addFileRejectedListener(event -> {
-            showNotification("File rejected: " + event.getErrorMessage(), true);
+            Notification.show("File rejected: " + event.getErrorMessage(), 3000, Notification.Position.BOTTOM_START);
         });
 
         upload.addFailedListener(event -> {
-            showNotification("Upload failed: " + event.getReason().getMessage(), true);
+            Notification.show("Upload failed: " + event.getReason().getMessage(), 3000,
+                    Notification.Position.BOTTOM_START);
         });
 
         // Input container with buttons
@@ -292,6 +345,12 @@ public class ChatView extends VerticalLayout {
                 .set("width", "100%");
 
         add(bottomStickyContainer);
+    }
+
+    @ClientCallable
+    private void sendMessageFromJS(String message) {
+        this.temporaryMessage = message;
+        sendMessage();
     }
 
     private void showImagePreview(UploadedFileData fileData) {
@@ -398,7 +457,7 @@ public class ChatView extends VerticalLayout {
                 .set("height", "0"); // Force height calculation from flex
 
         // Add emergency banner and messages scroller to messages area
-        messagesArea.add(emergencyBanner, messagesScroller);
+        messagesArea.add(messagesScroller);
         messagesArea.setFlexGrow(1, messagesScroller);
 
         // Add messages area to main layout
@@ -426,7 +485,16 @@ public class ChatView extends VerticalLayout {
 
     @ClientCallable
     private void sendMessage() {
-        String message = messageInput.getValue().trim();
+        String message;
+
+        if (temporaryMessage != null) {
+            message = temporaryMessage;
+            temporaryMessage = null;
+        } else {
+            message = messageInput.getValue().trim();
+            messageInput.clear();
+        }
+
         if (message.isEmpty() || isWaitingForResponse) {
             return;
         }
@@ -434,7 +502,6 @@ public class ChatView extends VerticalLayout {
         conversationHistory.add(new ConversationMessage("user", message));
 
         if (currentSessionId == null) {
-            showNotification("Please wait, initializing session...", false);
             return;
         }
 
@@ -442,6 +509,7 @@ public class ChatView extends VerticalLayout {
         addUserMessage(message, new ArrayList<>(uploadedFiles));
         messageInput.clear();
         clearImagePreviews();
+        scrollToBottom();
 
         // Clear uploaded files immediately
         List<UploadedFileData> filesToProcess = new ArrayList<>(uploadedFiles);
@@ -762,7 +830,6 @@ public class ChatView extends VerticalLayout {
         // Update message group tracking
         if (!"user".equals(lastMessageSender)) {
             // Starting a new user message group
-            hideAvatarsInPreviousGroup();
             currentMessageGroup.clear();
             lastMessageSender = "user";
         }
@@ -776,25 +843,6 @@ public class ChatView extends VerticalLayout {
                 .set("padding", "0 4px")
                 .set("position", "relative");
 
-        // User avatar - initially hidden, will be shown only on the last message
-        Div userAvatar = new Div();
-        userAvatar.setText("👤");
-        userAvatar.getStyle()
-                .set("width", "24px")
-                .set("height", "24px")
-                .set("border-radius", "50%")
-                .set("background", "#e5e7eb")
-                .set("display", "none") // Initially hidden
-                .set("align-items", "center")
-                .set("justify-content", "center")
-                .set("font-size", "12px")
-                .set("margin-left", "8px")
-                .set("margin-top", "auto")
-                .set("flex-shrink", "0");
-
-        // Add class for easier identification
-        userAvatar.addClassName("user-avatar");
-
         // Message content container
         Div messageContent = new Div();
         messageContent.getStyle()
@@ -802,7 +850,7 @@ public class ChatView extends VerticalLayout {
                 .set("flex-direction", "column")
                 .set("align-items", "flex-end")
                 .set("max-width", "80%")
-                .set("margin-right", "32px"); // Add right margin for avatar space
+                .set("margin-right", "10px");
 
         // Image attachments (above message bubble)
         if (!attachments.isEmpty()) {
@@ -880,7 +928,7 @@ public class ChatView extends VerticalLayout {
                 .set("z-index", "10");
 
         editButton.addClickListener(e -> {
-            showNotification("Edit functionality coming soon!", false);
+            Notification.show("Edit functionality coming soon!", 3000, Notification.Position.BOTTOM_START);
         });
 
         messageBubble.add(editButton);
@@ -895,66 +943,19 @@ public class ChatView extends VerticalLayout {
         });
 
         messageContent.add(messageBubble);
-        messageRow.add(messageContent, userAvatar);
+        messageRow.add(messageContent);
         messagesContainer.add(messageRow);
         messageElements.add(messageRow);
         currentMessageGroup.add(messageRow);
 
-        // Show avatar on this message (it's the current last user message)
-        showUserAvatarOnLastMessage();
-    }
+        scrollToBottom();
 
-    // Helper method to show user avatar only on the last message
-    private void showUserAvatarOnLastMessage() {
-        // Hide all user avatars in current group
-        for (Div messageRow : currentMessageGroup) {
-            messageRow.getChildren()
-                    .filter(component -> component instanceof Div)
-                    .forEach(component -> {
-                        Div div = (Div) component;
-                        if ("👤".equals(div.getText())) {
-                            div.getStyle().set("display", "none");
-                        }
-                    });
-        }
-
-        // Show avatar only on the last message in the group
-        if (!currentMessageGroup.isEmpty()) {
-            Div lastMessageRow = currentMessageGroup.get(currentMessageGroup.size() - 1);
-            lastMessageRow.getChildren()
-                    .filter(component -> component instanceof Div)
-                    .forEach(component -> {
-                        Div div = (Div) component;
-                        if ("👤".equals(div.getText())) {
-                            div.getStyle().set("display", "flex");
-                            // Adjust message content margin
-                            lastMessageRow.getChildren()
-                                    .filter(comp -> comp instanceof Div &&
-                                            comp != div &&
-                                            ((Div) comp).getStyle().get("flex-direction") != null)
-                                    .findFirst()
-                                    .ifPresent(content -> ((Div) content).getStyle().set("margin-right", "0"));
-                        }
-                    });
-        }
-    }
-
-    // Helper method to hide avatars in previous message group
-    private void hideAvatarsInPreviousGroup() {
-        // This method ensures that when switching between bot/user messages,
-        // the previous group's avatars are properly managed
-        if ("user".equals(lastMessageSender)) {
-            // We're switching from user to bot, make sure last user message shows avatar
-            showUserAvatarOnLastMessage();
-        }
-        // For bot messages, the avatar visibility is already handled in addBotMessage
     }
 
     private void addBotMessage(String text, boolean showAvatar) {
         // Update message group tracking
         if (!"bot".equals(lastMessageSender)) {
             // Starting a new bot message group
-            hideAvatarsInPreviousGroup();
             currentMessageGroup.clear();
             lastMessageSender = "bot";
         }
@@ -970,7 +971,14 @@ public class ChatView extends VerticalLayout {
 
         // Bot avatar - only show if this is the last message in the group
         Div botAvatar = new Div();
-        botAvatar.setText("🤖");
+
+        Image botGif = new Image("images/robot-icon.gif", "bot-icon");
+        botGif.getStyle()
+                .set("width", "24px")
+                .set("height", "24px")
+                .set("border-radius", "50%");
+        botAvatar.add(botGif);
+
         botAvatar.getStyle()
                 .set("width", "24px")
                 .set("height", "24px")
@@ -1029,7 +1037,7 @@ public class ChatView extends VerticalLayout {
                 .set("z-index", "10");
 
         editButton.addClickListener(e -> {
-            showNotification("Bot message options coming soon!", false);
+            Notification.show("Bot message options coming soon!", 3000, Notification.Position.BOTTOM_START);
         });
 
         messageBubble.add(editButton);
@@ -1047,6 +1055,8 @@ public class ChatView extends VerticalLayout {
         messagesContainer.add(messageRow);
         messageElements.add(messageRow);
         currentMessageGroup.add(messageRow);
+
+        scrollToBottom();
     }
 
     private String formatText(String text) {
@@ -1182,7 +1192,12 @@ public class ChatView extends VerticalLayout {
 
         // Bot avatar for typing indicator
         Div botAvatar = new Div();
-        botAvatar.setText("🤖");
+        Image botGif = new Image("images/robot-icon.gif", "bot-icon");
+        botGif.getStyle()
+                .set("width", "24px")
+                .set("height", "24px")
+                .set("border-radius", "50%");
+        botAvatar.add(botGif);
         botAvatar.getStyle()
                 .set("width", "24px")
                 .set("height", "24px")
@@ -1205,21 +1220,64 @@ public class ChatView extends VerticalLayout {
                 .set("align-items", "center")
                 .set("gap", "4px");
 
+        // Create dots with unique IDs for JavaScript animation
         for (int i = 0; i < 3; i++) {
             Div dot = new Div();
+            dot.setId("typing-dot-" + i);
             dot.getStyle()
                     .set("width", "8px")
                     .set("height", "8px")
                     .set("background", "#9ca3af")
                     .set("border-radius", "50%")
-                    .set("animation", "typingDot 1.4s infinite ease-in-out")
-                    .set("animation-delay", (i * 0.2) + "s");
+                    .set("opacity", "0.4");
             typingBubble.add(dot);
         }
 
         typingRow.add(botAvatar, typingBubble);
         messagesContainer.add(typingRow);
         scrollToBottom();
+
+        // Start JavaScript animation for wave effect
+        getUI().ifPresent(ui -> {
+            ui.getPage().executeJs("""
+                        // Function to animate dots in wave pattern
+                        function animateTypingDots() {
+                            const dots = [
+                                document.getElementById('typing-dot-0'),
+                                document.getElementById('typing-dot-1'),
+                                document.getElementById('typing-dot-2')
+                            ];
+
+                            if (!dots[0] || !dots[1] || !dots[2]) return;
+
+                            let currentDot = 0;
+
+                            function animateDot(index) {
+                                // Reset all dots to default state
+                                dots.forEach((dot, i) => {
+                                    dot.style.transform = 'translateY(0px)';
+                                    dot.style.opacity = '0.4';
+                                });
+
+                                // Animate the current dot
+                                dots[index].style.transform = 'translateY(-6px)';
+                                dots[index].style.opacity = '1';
+
+                                // Move to next dot
+                                currentDot = (index + 1) % 3;
+
+                                // Schedule next animation
+                                setTimeout(() => animateDot(currentDot), 200);
+                            }
+
+                            // Start the animation
+                            animateDot(0);
+                        }
+
+                        // Start animation after a short delay
+                        setTimeout(animateTypingDots, 100);
+                    """);
+        });
     }
 
     private void removeTypingIndicator() {
@@ -1228,6 +1286,7 @@ public class ChatView extends VerticalLayout {
                         component.getId().get().equals("typing-indicator"))
                 .findFirst()
                 .ifPresent(messagesContainer::remove);
+        scrollToBottom();
     }
 
     private void setInputEnabled(boolean enabled) {
@@ -1255,12 +1314,10 @@ public class ChatView extends VerticalLayout {
         }
     }
 
-    
     public void findNearbyEmergencyVets() {
         System.out.println("Finding nearby vets with coordinates: " + userLatitude + ", " + userLongitude);
 
         if (userLatitude == 0.0 && userLongitude == 0.0) {
-            showNotification("Location not available. Please enable location access and refresh the page.", true);
             return;
         }
 
@@ -1284,41 +1341,110 @@ public class ChatView extends VerticalLayout {
             getUI().ifPresent(ui -> ui.access(() -> {
                 if (response != null) {
                     System.out.println("Showing dialog with response: " + response);
+                    showNearbyVetsDialog(response);
                 } else {
                     System.out.println("No response received, showing error notification");
-                    showNotification(
+
+                    Notification.show(
                             "Unable to find nearby emergency vets. Please search online or call your regular vet.",
-                            true);
+                            1000, Notification.Position.BOTTOM_START);
                 }
                 ui.push();
             }));
         });
     }
 
+    private void showNearbyVetsDialog(String response) {
+        try {
+            JsonNode jsonResponse = objectMapper.readTree(response);
+            JsonNode nearbyVets = jsonResponse.path("nearbyVets");
+
+            Dialog dialog = new Dialog();
+            dialog.setHeaderTitle("Nearby Emergency Veterinary Clinics");
+            dialog.setWidth("600px");
+            dialog.setHeight("500px");
+
+            VerticalLayout content = new VerticalLayout();
+            content.setPadding(false);
+            content.setSpacing(true);
+
+            if (nearbyVets.isArray() && nearbyVets.size() > 0) {
+                for (JsonNode vetNode : nearbyVets) {
+                    Div vetCard = createVetCard(vetNode);
+                    content.add(vetCard);
+                }
+            } else {
+                content.add(new Span(
+                        "No emergency veterinary clinics found nearby. Please search online or contact your regular veterinarian."));
+            }
+
+            Button closeButton = new Button("Close", e -> dialog.close());
+            closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+            dialog.getFooter().add(closeButton);
+            dialog.add(content);
+            dialog.open();
+
+        } catch (Exception e) {
+            System.err.println("Error parsing nearby vets response: " + e.getMessage());
+            Notification.show("Error displaying nearby vets. Please try again later.", 3000,
+                    Notification.Position.BOTTOM_START);
+        }
+    }
 
     @ClientCallable
     public void triggerEmergency() {
         findNearbyEmergencyVets();
     }
 
+    private Div createVetCard(JsonNode vetNode) {
+        Div card = new Div();
+        card.getStyle()
+                .set("border", "1px solid #e5e7eb")
+                .set("border-radius", "8px")
+                .set("padding", "16px")
+                .set("margin-bottom", "12px")
+                .set("background", "white");
 
-    private void showNotification(String message, boolean isError) {
-        Notification notification = Notification.show(message, 3000, Notification.Position.TOP_CENTER);
-        if (isError) {
-            notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
-        } else {
-            notification.addThemeVariants(NotificationVariant.LUMO_SUCCESS);
-        }
+        H4 name = new H4(vetNode.path("name").asText("Veterinary Clinic"));
+        name.getStyle().set("margin", "0 0 8px 0").set("color", "#1f2937");
+
+        Span address = new Span(vetNode.path("address").asText("Address not available"));
+        address.getStyle().set("color", "#6b7280").set("font-size", "14px");
+
+        Span phone = new Span("📞 " + vetNode.path("phoneNumber").asText("Contact for phone"));
+        phone.getStyle().set("color", "#374151").set("font-size", "14px");
+
+        double distance = vetNode.path("distanceKm").asDouble(0);
+        Span distanceSpan = new Span(String.format("📍 %.1f km away", distance));
+        distanceSpan.getStyle().set("color", "#059669").set("font-weight", "600").set("font-size", "14px");
+
+        HorizontalLayout info = new HorizontalLayout(phone, distanceSpan);
+        info.setSpacing(true);
+        info.setAlignItems(FlexComponent.Alignment.CENTER);
+
+        card.add(name, address, info);
+
+        return card;
     }
 
     private void scrollToBottom() {
         getUI().ifPresent(ui -> ui.access(() -> {
-            // Only scroll if user is near the bottom
-            messagesScroller.getElement().executeJs(
-                    "const threshold = 100; " + // pixels from bottom
-                            "if (this.scrollHeight - this.scrollTop - this.clientHeight <= threshold) { " +
-                            "  this.scrollTop = this.scrollHeight; " +
-                            "}");
+            // Use a more reliable scrolling method
+            messagesScroller.getElement().executeJs("""
+                        // Scroll to bottom immediately
+                        this.scrollTop = this.scrollHeight;
+
+                        // Also add a slight delay scroll to catch any DOM updates
+                        setTimeout(() => {
+                            this.scrollTop = this.scrollHeight;
+                        }, 50);
+
+                        // Another safety scroll after animations
+                        setTimeout(() => {
+                            this.scrollTop = this.scrollHeight;
+                        }, 200);
+                    """);
         }));
     }
 
@@ -1342,7 +1468,8 @@ public class ChatView extends VerticalLayout {
                         this.currentSessionId = sessionId;
                         System.out.println("Session started successfully: " + sessionId);
                     } else {
-                        showNotification("Failed to start session. Please refresh the page.", true);
+                        Notification.show("Failed to start session. Please refresh the page.", 3000,
+                                Notification.Position.BOTTOM_START);
                     }
                     ui.push();
                 });
@@ -1401,10 +1528,6 @@ public class ChatView extends VerticalLayout {
                             +
                             "styleSheet.insertRule('div[style*=\"word-wrap: break-word\"] { overflow-wrap: break-word !important; word-break: break-word !important; hyphens: auto !important; max-width: 100% !important; }');");
 
-            // Add keyframe animation
-            ui.getPage().executeJs(
-                    "const styleSheet = document.styleSheets[document.styleSheets.length - 1];" +
-                            "styleSheet.insertRule('@keyframes typingDot { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-10px); } }');");
 
             // Add textarea functionality
             ui.getPage().executeJs(
@@ -1431,20 +1554,32 @@ public class ChatView extends VerticalLayout {
                             "    textarea.addEventListener('focus', resizeTextarea);" +
                             "    textarea.addEventListener('blur', resizeTextarea);" +
                             "    " +
-                            "    textarea.addEventListener('keydown', function(e) {" +
-                            "      if (e.key === 'Enter' && !e.shiftKey) {" +
-                            "        e.preventDefault();" +
-                            "        const event = new KeyboardEvent('keydown', {" +
-                            "          key: 'Enter'," +
-                            "          keyCode: 13," +
-                            "          which: 13," +
-                            "          shiftKey: false," +
-                            "          bubbles: true" +
-                            "        });" +
-                            "        textarea.dispatchEvent(event);" +
-                            "        return false;" +
+                            "    resizeTextarea();" +
+                            "  }" +
+                            "}, 100);");
+            ui.getPage().executeJs(
+                    "setTimeout(() => {" +
+                            "  const textarea = document.querySelector('vaadin-text-area textarea');" +
+                            "  if (textarea) {" +
+                            "    const minHeight = 44;" +
+                            "    const maxHeight = 120;" +
+                            "    " +
+                            "    function resizeTextarea() {" +
+                            "      textarea.style.height = minHeight + 'px';" +
+                            "      const scrollHeight = textarea.scrollHeight;" +
+                            "      " +
+                            "      if (scrollHeight <= maxHeight) {" +
+                            "        textarea.style.height = scrollHeight + 'px';" +
+                            "        textarea.style.overflowY = 'hidden';" +
+                            "      } else {" +
+                            "        textarea.style.height = maxHeight + 'px';" +
+                            "        textarea.style.overflowY = 'auto';" +
                             "      }" +
-                            "    });" +
+                            "    }" +
+                            "    " +
+                            "    textarea.addEventListener('input', resizeTextarea);" +
+                            "    textarea.addEventListener('focus', resizeTextarea);" +
+                            "    textarea.addEventListener('blur', resizeTextarea);" +
                             "    " +
                             "    resizeTextarea();" +
                             "  }" +
@@ -1487,7 +1622,6 @@ public class ChatView extends VerticalLayout {
             // Set default coordinates if user skips
             this.userLatitude = 45.4215;
             this.userLongitude = -75.6972;
-            showNotification("Using default location. You can enable location access later.", false);
         });
 
         HorizontalLayout buttons = new HorizontalLayout(enableButton, skipButton);
@@ -1542,7 +1676,7 @@ public class ChatView extends VerticalLayout {
         this.userLatitude = latitude;
         this.userLongitude = longitude;
 
-        showNotification("Location detected for emergency vet search", false);
+        Notification.show("Location detected for emergency vet search", 1000, Notification.Position.BOTTOM_START);
         System.out.println("User location: " + latitude + ", " + longitude);
     }
 

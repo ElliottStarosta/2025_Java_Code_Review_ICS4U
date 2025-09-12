@@ -299,6 +299,7 @@ public class ChatService {
 
             // Add warnings
             if (structuredResponse.getWarnings() != null && !structuredResponse.getWarnings().isEmpty()) {
+                displayText.append("|||SPLIT|||");
                 displayText.append("**⚠️ Important:**\n");
                 for (String warning : structuredResponse.getWarnings()) {
                     displayText.append("• ").append(warning).append("\n");
@@ -308,6 +309,7 @@ public class ChatService {
 
             // Add questions
             if (structuredResponse.getQuestions() != null && !structuredResponse.getQuestions().isEmpty()) {
+                displayText.append("|||SPLIT|||");
                 displayText.append("**Questions to help assess further:**\n");
                 for (String question : structuredResponse.getQuestions()) {
                     displayText.append("• ").append(question).append("\n");
