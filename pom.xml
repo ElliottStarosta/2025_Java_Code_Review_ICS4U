@@ -15,7 +15,7 @@
     <groupId>com.virtualvet</groupId>
     <artifactId>virtual-vet-chatbot</artifactId>
     <version>1.0.0</version>
-    <name>Virtual Vet Chatbot</name>
+    <name>Novavet</name>
     <description>AI-powered veterinary consultation chatbot</description>
     <packaging>jar</packaging>
 

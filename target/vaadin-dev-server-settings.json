@@ -11,7 +11,7 @@
   "jarResourcesFolder": "C:/Users/starl/Documents/GitHub/connections/vetbot/./frontend/generated/jar-resources",
   "themeName": "",
   "clientServiceWorkerSource": "C:\\Users\\starl\\Documents\\GitHub\\connections\\vetbot\\target\\sw.ts",
-  "pwaEnabled": false,
-  "offlineEnabled": false,
+  "pwaEnabled": true,
+  "offlineEnabled": true,
   "offlinePath": "'offline.html'"
 }

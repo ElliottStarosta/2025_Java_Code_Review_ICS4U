@@ -23,6 +23,13 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Main Spring Boot application class for VetChat
+ * 
+ * 
+ * @author Elliott Starosta
+ * @version 1.0
+ */
 @SpringBootApplication
 @EnableJpaRepositories
 @EnableTransactionManagement
@@ -32,12 +39,24 @@ public class VetChatApplication {
 
     private static final Logger logger = LoggerFactory.getLogger(VetChatApplication.class);
 
+    /**
+     * Main entry point for the VetChat Spring Boot application.
+     * Disables Vaadin message security and launches the application.
+     *
+     * @param args command line arguments passed to the application
+     */
     public static void main(String[] args) {
         System.setProperty("vaadin.disableMessageSecurity", "true");
         SpringApplication.run(VetChatApplication.class, args);
     }
 
-    // -------------------- Beans --------------------
+
+    /**
+     * Configures CORS (Cross-Origin Resource Sharing) settings for the application.
+     * Allows requests from localhost:8080 with various HTTP methods and headers.
+     *
+     * @return WebMvcConfigurer with CORS configuration
+     */
     @Bean
     public WebMvcConfigurer corsConfigurer() {
         return new WebMvcConfigurer() {
@@ -53,14 +72,25 @@ public class VetChatApplication {
         };
     }
 
+    /**
+     * Creates a MultipartResolver bean for handling file uploads in HTTP requests.
+     *
+     * @return StandardServletMultipartResolver instance for processing multipart requests
+     */
     @Bean
     public MultipartResolver multipartResolver() {
         return new StandardServletMultipartResolver();
     }
 
-    // -------------------- Startup Banner & Animation --------------------
+
+    /**
+     * Event listener that executes when the application has fully started.
+     * Displays a startup banner and loading animations for initialization steps.
+     *
+     * @throws InterruptedException if the loading animation is interrupted
+     */
     @EventListener(ApplicationReadyEvent.class)
-    public void onStartup() {
+    public void onStartup() throws InterruptedException {
         printBanner();
         try {
             showLoadingAnimation("Initializing VetBot", 30, 100);
@@ -72,10 +102,14 @@ public class VetChatApplication {
         }
     }
 
+    /**
+     * Prints a formatted banner to the console on application startup.
+     * The banner displays the application name and description within a star border.
+     */
     private void printBanner() {
         int width = 50; // total width of the banner including stars
         String[] lines = {
-                "VETBOT",
+                "VetChat Application",
                 "Your Virtual Veterinary Assistant Awaits!",
                 "Spring Boot Application"
         };
@@ -101,6 +135,14 @@ public class VetChatApplication {
         System.out.println("*".repeat(width));
     }
 
+    /**
+     * Displays a loading animation in the console with a progress bar.
+     *
+     * @param message the text to display before the progress bar
+     * @param steps the number of progress steps to display
+     * @param delayMillis the delay between each progress step in milliseconds
+     * @throws InterruptedException if the animation thread is interrupted
+     */
     private void showLoadingAnimation(String message, int steps, int delayMillis) throws InterruptedException {
         System.out.print(message + ": [");
         for (int i = 0; i < steps; i++) {
@@ -111,13 +153,16 @@ public class VetChatApplication {
     }
 }
 
-// -------------------- Python VQA Server Manager --------------------
+/**
+ * Component responsible for managing the Python VQA (Visual Question Answering) server process.
+ * Handles starting, monitoring, and stopping the external Python server.
+ */
 @Component
 class PythonVQAServerManager {
 
     private static final Logger logger = LoggerFactory.getLogger(PythonVQAServerManager.class);
 
-    @Value("${vqa.python.script.path:C:/Users/starl/Documents/GitHub/connections/main.py}")
+    @Value("${vqa.python.script.path:C:/Users/starl/Documents/GitHub/connections/vetbot/main.py}")
     private String pythonScriptPath;
 
     @Value("${vqa.python.executable:python}")
@@ -140,6 +185,10 @@ class PythonVQAServerManager {
 
     private Process pythonProcess;
 
+    /**
+     * Event listener that starts the Python VQA server when the application is ready.
+     * Configures the process environment, starts the server, and sets up output reading.
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void startPythonVQAServer() {
         logger.info("Starting Python VQA Server...");
@@ -174,6 +223,10 @@ class PythonVQAServerManager {
         }
     }
 
+    /**
+     * Starts a background thread to read and log output from the Python server process.
+     * Categorizes log messages based on their severity level.
+     */
     private void startOutputReader() {
         Thread outputReaderThread = new Thread(() -> {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(pythonProcess.getInputStream()))) {
@@ -201,6 +254,11 @@ class PythonVQAServerManager {
         outputReaderThread.start();
     }
 
+    /**
+     * Waits for the Python server to become ready by performing health checks at intervals.
+     *
+     * @return true if the server becomes ready within the configured timeout, false otherwise
+     */
     private boolean waitForServerReady() {
         logger.info("Waiting for Python VQA Server to be ready...");
 
@@ -229,6 +287,11 @@ class PythonVQAServerManager {
         return false;
     }
 
+    /**
+     * Performs a health check on the Python server by making an HTTP request to its health endpoint.
+     *
+     * @return true if the health check succeeds (HTTP 200 response), false otherwise
+     */
     private boolean checkServerHealth() {
         try {
             ProcessBuilder healthCheck = new ProcessBuilder(
@@ -247,6 +310,10 @@ class PythonVQAServerManager {
         return false;
     }
 
+    /**
+     * Stops the Python server process gracefully, with a fallback to forced termination.
+     * Attempts graceful shutdown first, then forces termination if necessary.
+     */
     public void stopPythonServer() {
         if (pythonProcess != null && pythonProcess.isAlive()) {
             logger.info("Stopping Python VQA Server...");
@@ -266,22 +333,39 @@ class PythonVQAServerManager {
         }
     }
 
+    /**
+     * Checks if the Python server is currently running and responsive.
+     *
+     * @return true if the server process is alive and health checks succeed, false otherwise
+     */
     public boolean isServerRunning() {
         return pythonProcess != null && pythonProcess.isAlive() && checkServerHealth();
     }
 }
 
-// -------------------- Optional Health Monitor --------------------
+/**
+ * Component that periodically monitors the health of the Python VQA server.
+ * Runs scheduled health checks and logs warnings if the server appears to be down.
+ */
 @Component
 class VQAServerHealthMonitor {
 
     private static final Logger logger = LoggerFactory.getLogger(VQAServerHealthMonitor.class);
     private final PythonVQAServerManager serverManager;
 
+    /**
+     * Constructs a VQAServerHealthMonitor with the specified server manager.
+     *
+     * @param serverManager the PythonVQAServerManager instance to monitor
+     */
     public VQAServerHealthMonitor(PythonVQAServerManager serverManager) {
         this.serverManager = serverManager;
     }
 
+    /**
+     * Scheduled method that performs health checks on the Python VQA server.
+     * Runs every 60 seconds and logs warnings if the server is not responsive.
+     */
     @Scheduled(fixedRate = 60000)
     public void performHealthCheck() {
         if (!serverManager.isServerRunning()) {

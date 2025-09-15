@@ -2,11 +2,8 @@ package com.virtualvet.view;
 
 import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.ClientCallable;
-import com.vaadin.flow.component.ComponentUtil;
+import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.Key;
-import com.vaadin.flow.component.KeyModifier;
-import com.vaadin.flow.component.KeyPressEvent;
-import com.vaadin.flow.component.ShortcutRegistration;
 import com.vaadin.flow.component.Shortcuts;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -23,24 +20,23 @@ import com.vaadin.flow.component.orderedlayout.Scroller;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.upload.Upload;
-import com.vaadin.flow.component.upload.receivers.MemoryBuffer;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import com.vaadin.flow.theme.lumo.LumoUtility;
 import com.virtualvet.dto.StructuredVetResponse;
 import com.virtualvet.model.ConversationContext;
 import com.virtualvet.service.ChatService;
 import com.virtualvet.util.ApiClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nimbusds.jose.shaded.gson.JsonObject;
 import com.vaadin.flow.component.upload.receivers.MultiFileMemoryBuffer;
-import com.vaadin.flow.function.SerializableRunnable;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
@@ -53,7 +49,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Route(value = "", layout = MainLayout.class)
-@PageTitle("Chat | Virtual Vet")
+@PageTitle("Chat | Novavet")
 public class ChatView extends VerticalLayout {
 
     private VerticalLayout messagesContainer;
@@ -67,7 +63,6 @@ public class ChatView extends VerticalLayout {
     private List<UploadedFileData> uploadedFiles = new ArrayList<>();
 
     private String lastMessageSender = null; // Track who sent the last message
-    private AtomicBoolean enterPressed = new AtomicBoolean(false);
     private AtomicLong lastEnterTime = new AtomicLong(0);
     private long debounceMillis = 300; // adjust to taste (300ms = 0.3 sec)
     private String temporaryMessage = null;
@@ -470,7 +465,7 @@ public class ChatView extends VerticalLayout {
 
     private void addWelcomeMessage() {
         addBotMessages(List.of(
-                "👋 Hello! I'm your Virtual Vet Assistant.",
+                "👋 Hello! I'm your Virtual Vet Assistant, Novavet.",
                 "I'm here to help you with:\n🔸 Pet health concerns and symptoms\n🔸 Emergency guidance and triage\n🔸 General veterinary advice",
                 "⚠️ **For true emergencies, please contact your local veterinary clinic immediately!**",
                 "How can I help you and your pet today?"));
@@ -841,7 +836,10 @@ public class ChatView extends VerticalLayout {
                 .set("justify-content", "flex-end")
                 .set("margin-bottom", "12px")
                 .set("padding", "0 4px")
-                .set("position", "relative");
+                .set("position", "relative")
+                .set("opacity", "0")
+                .set("transform", "translateY(10px)")
+                .set("transition", "opacity 0.3s ease, transform 0.3s ease");
 
         // Message content container
         Div messageContent = new Div();
@@ -904,52 +902,305 @@ public class ChatView extends VerticalLayout {
                 .set("white-space", "pre-wrap")
                 .set("position", "relative");
 
-        // Edit button (3 dots)
-        Button editButton = new Button();
-        Icon dotsIcon = new Icon(VaadinIcon.ELLIPSIS_DOTS_H);
-        dotsIcon.setSize("14px");
-        dotsIcon.setColor("#9ca3af");
-        editButton.setIcon(dotsIcon);
+        // Create action buttons container (positioned below the message)
+        Div actionButtons = new Div();
+        actionButtons.getStyle()
+                .set("display", "none") // Start hidden
+                .set("gap", "8px")
+                .set("margin-top", "4px")
+                .set("justify-content", "flex-end")
+                .set("height", "0") // No invisible space
+                .set("overflow", "hidden")
+                .set("opacity", "0") // Start fully transparent
+                .set("transform", "translateY(-10px)") // Start slightly above
+                .set("transition", "all 0.3s ease"); // Smooth transition for all properties
+
+        // Edit button
+        Button editButton = new Button("Edit");
         editButton.getStyle()
-                .set("position", "absolute")
-                .set("top", "-8px")
-                .set("right", "-8px")
-                .set("width", "24px")
-                .set("height", "24px")
-                .set("min-width", "24px")
-                .set("background", "white")
-                .set("border", "1px solid #e5e7eb")
-                .set("border-radius", "50%")
-                .set("display", "none")
-                .set("align-items", "center")
-                .set("justify-content", "center")
+                .set("font-size", "12px")
+                .set("padding", "4px 8px")
+                .set("background", "transparent")
+                .set("border", "1px solid #d1d5db")
+                .set("border-radius", "4px")
+                .set("color", "#6b7280")
                 .set("cursor", "pointer")
-                .set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)")
-                .set("z-index", "10");
+                .set("transition", "all 0.2s ease");
 
+        // Delete button
+        Button deleteButton = new Button("Delete");
+        deleteButton.getStyle()
+                .set("font-size", "12px")
+                .set("padding", "4px 8px")
+                .set("background", "transparent")
+                .set("border", "1px solid #fecaca")
+                .set("border-radius", "4px")
+                .set("color", "#dc2626")
+                .set("cursor", "pointer")
+                .set("transition", "all 0.2s ease");
+
+        actionButtons.add(editButton, deleteButton);
+
+        // Show action buttons on hover with smooth animation
+        messageContent.getElement().addEventListener("mouseenter", e -> {
+            actionButtons.getStyle()
+                    .set("display", "flex")
+                    .set("height", "auto")
+                    .set("opacity", "1")
+                    .set("transform", "translateY(0)");
+        });
+
+        messageContent.getElement().addEventListener("mouseleave", e -> {
+            actionButtons.getStyle()
+                    .set("display", "none")
+                    .set("height", "0")
+                    .set("opacity", "0")
+                    .set("transform", "translateY(-10px)");
+        });
+
+        // Add hover effects for individual buttons
+        editButton.getElement().addEventListener("mouseenter", e -> {
+            editButton.getStyle()
+                    .set("background-color", "#f3f4f6")
+                    .set("border-color", "#9ca3af");
+        });
+
+        editButton.getElement().addEventListener("mouseleave", e -> {
+            editButton.getStyle()
+                    .set("background-color", "transparent")
+                    .set("border-color", "#d1d5db");
+        });
+
+        deleteButton.getElement().addEventListener("mouseenter", e -> {
+            deleteButton.getStyle()
+                    .set("background-color", "#fef2f2")
+                    .set("border-color", "#f87171");
+        });
+
+        deleteButton.getElement().addEventListener("mouseleave", e -> {
+            deleteButton.getStyle()
+                    .set("background-color", "transparent")
+                    .set("border-color", "#fecaca");
+        });
+
+        // Edit functionality
         editButton.addClickListener(e -> {
-            Notification.show("Edit functionality coming soon!", 3000, Notification.Position.BOTTOM_START);
+            // Create edit dialog
+            Dialog editDialog = new Dialog();
+            editDialog.setHeaderTitle("Edit Message");
+            editDialog.setWidth("400px");
+
+            TextArea editField = new TextArea();
+            editField.setValue(text);
+            editField.setWidthFull();
+            editField.setMinHeight("120px");
+
+            Button saveButton = new Button("Save & Update", event -> {
+                String newText = editField.getValue().trim();
+                if (!newText.isEmpty() && !newText.equals(text)) {
+                    // Update the message content
+                    messageBubble.getElement().setProperty("innerHTML", formatText(newText));
+
+                    // Find the position of this message
+                    int messageIndex = messagesContainer.getChildren()
+                            .collect(Collectors.toList())
+                            .indexOf(messageRow);
+
+                    // Remove all AI responses that came after this message
+                    List<Component> children = new ArrayList<>(messagesContainer.getChildren()
+                            .collect(Collectors.toList()));
+
+                    for (int i = children.size() - 1; i > messageIndex; i--) {
+                        Component child = children.get(i);
+                        if (child instanceof Div) {
+                            Div div = (Div) child;
+                            // Check if this is an AI message (has left alignment/style)
+                            boolean isBotMessage = div.getStyle().get("justify-content") != null &&
+                                    div.getStyle().get("justify-content").equals("flex-start");
+
+                            if (isBotMessage) {
+                                messagesContainer.remove(child);
+                            }
+                        }
+                    }
+
+                    // Remove bot messages from conversation history that came after this message
+                    int userMessageIndex = -1;
+                    for (int i = 0; i < conversationHistory.size(); i++) {
+                        ConversationMessage msg = conversationHistory.get(i);
+                        if (msg.getRole().equals("user") && msg.getContent().equals(text)) {
+                            userMessageIndex = i;
+                            break;
+                        }
+                    }
+
+                    if (userMessageIndex != -1) {
+                        // Remove all messages after this user message
+                        while (conversationHistory.size() > userMessageIndex + 1) {
+                            conversationHistory.remove(conversationHistory.size() - 1);
+                        }
+
+                        // Update the user message with correction instruction
+                        String correctionMessage = "CORRECTION: I previously said \"" + text +
+                                "\" but I meant to say \"" + newText + "\". Please respond to the corrected version.";
+                        conversationHistory.set(userMessageIndex, new ConversationMessage("user", correctionMessage));
+                    }
+
+                    editDialog.close();
+                    Notification.show("Message updated", 2000, Notification.Position.BOTTOM_START);
+
+                    // Resend the corrected message to AI
+                    if (currentSessionId != null && !isWaitingForResponse) {
+                        // Show typing indicator and disable input
+                        showTypingIndicator();
+                        setInputEnabled(false);
+                        scrollToBottom();
+
+                        // Process the corrected message
+                        CompletableFuture.supplyAsync(() -> {
+                            try {
+                                MultiValueMap<String, Object> requestBody = new LinkedMultiValueMap<>();
+                                requestBody.add("sessionId", currentSessionId);
+
+                                // Send the correction instruction
+                                String correctionInstruction = "CORRECTION: The user previously said \"" + text +
+                                        "\" but corrected it to \"" + newText +
+                                        "\". Please respond to the corrected version and ignore the previous message.";
+                                requestBody.add("message", correctionInstruction);
+
+                                ConversationContext context = chatService.buildConversationContext(currentSessionId);
+                                requestBody.add("conversationHistory", context);
+
+                                String response = ApiClient.postMultipart("http://localhost:8080/api/chat/message",
+                                        requestBody);
+                                JsonNode jsonResponse = objectMapper.readTree(response);
+                                return jsonResponse.path("response").asText("Sorry, I couldn't generate a response.");
+                            } catch (Exception ex) {
+                                return "I'm having trouble connecting right now. Please try again in a moment.";
+                            }
+                        }).thenAccept(responseText -> {
+                            UI ui = getUI().orElse(null);
+                            if (ui != null) {
+                                ui.access(() -> {
+                                    removeTypingIndicator();
+                                    List<String> messages = splitIntoMessages(responseText);
+                                    addBotMessages(messages);
+                                    setInputEnabled(true);
+                                    messageInput.focus();
+                                    scrollToBottom();
+                                    ui.push();
+                                });
+                            }
+                        });
+                    }
+                } else if (newText.equals(text)) {
+                    Notification.show("No changes made", 2000, Notification.Position.BOTTOM_START);
+                    editDialog.close();
+                }
+            });
+            saveButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+
+            Button cancelButton = new Button("Cancel", event -> editDialog.close());
+
+            HorizontalLayout buttons = new HorizontalLayout(saveButton, cancelButton);
+            buttons.setSpacing(true);
+
+            VerticalLayout dialogContent = new VerticalLayout(editField, buttons);
+            dialogContent.setSpacing(true);
+            dialogContent.setPadding(false);
+
+            editDialog.add(dialogContent);
+            editDialog.open();
         });
 
-        messageBubble.add(editButton);
+        // Delete functionality
+        // Delete functionality
+        deleteButton.addClickListener(e -> {
+            // Create confirmation dialog
+            Dialog confirmDialog = new Dialog();
+            confirmDialog.setHeaderTitle("Delete Message");
+            confirmDialog.setWidth("300px");
 
-        // Show edit button on hover
-        messageBubble.getElement().addEventListener("mouseenter", e -> {
-            editButton.getStyle().set("display", "flex");
+            Span confirmText = new Span(
+                    "Are you sure you want to delete this message? All messages after this will also be removed.");
+
+            Button confirmButton = new Button("Delete", event -> {
+                // Find the position of this message
+                int messageIndex = messagesContainer.getChildren()
+                        .collect(Collectors.toList())
+                        .indexOf(messageRow);
+
+                // Remove all messages from this point onward (including this one)
+                List<Component> children = new ArrayList<>(messagesContainer.getChildren()
+                        .collect(Collectors.toList()));
+
+                for (int i = children.size() - 1; i >= messageIndex; i--) {
+                    Component child = children.get(i);
+                    messagesContainer.remove(child);
+                }
+
+                // Find the position in conversation history and remove all subsequent messages
+                int userMessageIndex = -1;
+                for (int i = 0; i < conversationHistory.size(); i++) {
+                    ConversationMessage msg = conversationHistory.get(i);
+                    if (msg.getRole().equals("user") && msg.getContent().equals(text)) {
+                        userMessageIndex = i;
+                        break;
+                    }
+                }
+
+                if (userMessageIndex != -1) {
+                    // Remove all messages from this point onward
+                    while (conversationHistory.size() > userMessageIndex) {
+                        conversationHistory.remove(conversationHistory.size() - 1);
+                    }
+                }
+
+                confirmDialog.close();
+                Notification.show("Message and all subsequent messages deleted", 2000,
+                        Notification.Position.BOTTOM_START);
+
+                // Don't send any instruction to AI - just remove the content
+                // The conversation will continue from the remaining messages
+            });
+            confirmButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
+
+            Button cancelButton = new Button("Cancel", event -> confirmDialog.close());
+
+            HorizontalLayout buttons = new HorizontalLayout(confirmButton, cancelButton);
+            buttons.setSpacing(true);
+
+            VerticalLayout dialogContent = new VerticalLayout(confirmText, buttons);
+            dialogContent.setSpacing(true);
+            dialogContent.setPadding(false);
+
+            confirmDialog.add(dialogContent);
+            confirmDialog.open();
         });
 
-        messageBubble.getElement().addEventListener("mouseleave", e -> {
-            editButton.getStyle().set("display", "none");
-        });
-
-        messageContent.add(messageBubble);
+        messageContent.add(messageBubble, actionButtons);
         messageRow.add(messageContent);
         messagesContainer.add(messageRow);
         messageElements.add(messageRow);
         currentMessageGroup.add(messageRow);
 
-        scrollToBottom();
+        // Add to conversation history
+        conversationHistory.add(new ConversationMessage("user", text));
 
+        // Animate the message in
+        getUI().ifPresent(ui -> ui.access(() -> {
+            ui.getPage().executeJs("""
+                        setTimeout(() => {
+                            const message = arguments[0];
+                            if (message) {
+                                message.style.opacity = '1';
+                                message.style.transform = 'translateY(0)';
+                            }
+                        }, 10);
+                    """, messageRow.getElement());
+        }));
+
+        scrollToBottom();
     }
 
     private void addBotMessage(String text, boolean showAvatar) {
@@ -967,7 +1218,10 @@ public class ChatView extends VerticalLayout {
                 .set("justify-content", "flex-start")
                 .set("margin-bottom", "12px")
                 .set("padding", "0 4px")
-                .set("position", "relative");
+                .set("position", "relative")
+                .set("opacity", "0")
+                .set("transform", "translateY(10px)")
+                .set("transition", "opacity 0.3s ease, transform 0.3s ease");
 
         // Bot avatar - only show if this is the last message in the group
         Div botAvatar = new Div();
@@ -1013,48 +1267,26 @@ public class ChatView extends VerticalLayout {
                 .set("position", "relative")
                 .set("margin-left", showAvatar ? "0" : "32px"); // Add left margin when no avatar
 
-        // Edit button (3 dots) for bot messages
-        Button editButton = new Button();
-        Icon dotsIcon = new Icon(VaadinIcon.ELLIPSIS_DOTS_H);
-        dotsIcon.setSize("14px");
-        dotsIcon.setColor("#9ca3af");
-        editButton.setIcon(dotsIcon);
-        editButton.getStyle()
-                .set("position", "absolute")
-                .set("top", "-8px")
-                .set("left", "-8px")
-                .set("width", "24px")
-                .set("height", "24px")
-                .set("min-width", "24px")
-                .set("background", "white")
-                .set("border", "1px solid #e5e7eb")
-                .set("border-radius", "50%")
-                .set("display", "none")
-                .set("align-items", "center")
-                .set("justify-content", "center")
-                .set("cursor", "pointer")
-                .set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)")
-                .set("z-index", "10");
-
-        editButton.addClickListener(e -> {
-            Notification.show("Bot message options coming soon!", 3000, Notification.Position.BOTTOM_START);
-        });
-
-        messageBubble.add(editButton);
-
-        // Show edit button on hover
-        messageBubble.getElement().addEventListener("mouseenter", e -> {
-            editButton.getStyle().set("display", "flex");
-        });
-
-        messageBubble.getElement().addEventListener("mouseleave", e -> {
-            editButton.getStyle().set("display", "none");
-        });
-
         messageRow.add(botAvatar, messageBubble);
         messagesContainer.add(messageRow);
         messageElements.add(messageRow);
         currentMessageGroup.add(messageRow);
+
+        // Add to conversation history
+        conversationHistory.add(new ConversationMessage("bot", text));
+
+        // Animate the message in
+        getUI().ifPresent(ui -> ui.access(() -> {
+            ui.getPage().executeJs("""
+                        setTimeout(() => {
+                            const message = arguments[0];
+                            if (message) {
+                                message.style.opacity = '1';
+                                message.style.transform = 'translateY(0)';
+                            }
+                        }, 10);
+                    """, messageRow.getElement());
+        }));
 
         scrollToBottom();
     }
@@ -1188,7 +1420,10 @@ public class ChatView extends VerticalLayout {
                 .set("display", "flex")
                 .set("justify-content", "flex-start")
                 .set("margin-bottom", "12px")
-                .set("padding", "0 4px");
+                .set("padding", "0 4px")
+                .set("opacity", "0")
+                .set("transform", "translateY(10px)")
+                .set("transition", "opacity 0.3s ease, transform 0.3s ease");
 
         // Bot avatar for typing indicator
         Div botAvatar = new Div();
@@ -1229,13 +1464,27 @@ public class ChatView extends VerticalLayout {
                     .set("height", "8px")
                     .set("background", "#9ca3af")
                     .set("border-radius", "50%")
-                    .set("opacity", "0.4");
+                    .set("opacity", "0.4")
+                    .set("transition", "transform 0.3s ease, opacity 0.3s ease");
             typingBubble.add(dot);
         }
 
         typingRow.add(botAvatar, typingBubble);
         messagesContainer.add(typingRow);
         scrollToBottom();
+
+        // Animate in the typing indicator
+        getUI().ifPresent(ui -> ui.access(() -> {
+            ui.getPage().executeJs("""
+                        setTimeout(() => {
+                            const indicator = document.getElementById('typing-indicator');
+                            if (indicator) {
+                                indicator.style.opacity = '1';
+                                indicator.style.transform = 'translateY(0)';
+                            }
+                        }, 10);
+                    """);
+        }));
 
         // Start JavaScript animation for wave effect
         getUI().ifPresent(ui -> {
@@ -1257,25 +1506,26 @@ public class ChatView extends VerticalLayout {
                                 dots.forEach((dot, i) => {
                                     dot.style.transform = 'translateY(0px)';
                                     dot.style.opacity = '0.4';
+                                    dot.style.transition = 'all 0.3s ease';
                                 });
 
                                 // Animate the current dot
-                                dots[index].style.transform = 'translateY(-6px)';
+                                dots[index].style.transform = 'translateY(-4px)';
                                 dots[index].style.opacity = '1';
 
                                 // Move to next dot
                                 currentDot = (index + 1) % 3;
 
                                 // Schedule next animation
-                                setTimeout(() => animateDot(currentDot), 200);
+                                setTimeout(() => animateDot(currentDot), 300);
                             }
 
-                            // Start the animation
-                            animateDot(0);
+                            // Start the animation after a short delay
+                            setTimeout(() => animateDot(0), 100);
                         }
 
-                        // Start animation after a short delay
-                        setTimeout(animateTypingDots, 100);
+                        // Start animation
+                        animateTypingDots();
                     """);
         });
     }
@@ -1285,8 +1535,27 @@ public class ChatView extends VerticalLayout {
                 .filter(component -> component.getId().isPresent() &&
                         component.getId().get().equals("typing-indicator"))
                 .findFirst()
-                .ifPresent(messagesContainer::remove);
-        scrollToBottom();
+                .ifPresent(indicator -> {
+                    // Add fade out animation before removing
+                    indicator.getStyle()
+                            .set("opacity", "0")
+                            .set("transform", "translateY(10px)")
+                            .set("transition", "opacity 0.3s ease, transform 0.3s ease");
+
+                    // Remove after animation completes
+                    getUI().ifPresent(ui -> ui.access(() -> {
+                        ui.setPollInterval(50);
+                        CompletableFuture.delayedExecutor(300, java.util.concurrent.TimeUnit.MILLISECONDS)
+                                .execute(() -> {
+                                    ui.access(() -> {
+                                        messagesContainer.remove(indicator);
+                                        scrollToBottom();
+                                        ui.setPollInterval(-1);
+                                        ui.push();
+                                    });
+                                });
+                    }));
+                });
     }
 
     private void setInputEnabled(boolean enabled) {
@@ -1360,36 +1629,370 @@ public class ChatView extends VerticalLayout {
             JsonNode nearbyVets = jsonResponse.path("nearbyVets");
 
             Dialog dialog = new Dialog();
-            dialog.setHeaderTitle("Nearby Emergency Veterinary Clinics");
-            dialog.setWidth("600px");
-            dialog.setHeight("500px");
+            dialog.setWidth("800px"); // Slightly wider for better spacing
+            dialog.setMaxWidth("95vw");
+            dialog.setHeight("700px"); // Taller for better content flow
+            dialog.setMaxHeight("90vh");
+            dialog.setResizable(true);
+            dialog.setDraggable(true);
 
+            // Modern header with better spacing
+            HorizontalLayout headerLayout = new HorizontalLayout();
+            headerLayout.setWidthFull();
+            headerLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
+            headerLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+            headerLayout.setPadding(true);
+            headerLayout.getStyle()
+                    .set("border-bottom", "1px solid var(--lumo-contrast-10pct)")
+                    .set("background", "var(--lumo-base-color)");
+
+            // Header left side with icon and title
+            HorizontalLayout titleLayout = new HorizontalLayout();
+            titleLayout.setSpacing(true);
+            titleLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+
+            Icon emergencyIcon = new Icon(VaadinIcon.HOSPITAL);
+            emergencyIcon.addClassNames(LumoUtility.TextColor.ERROR);
+            emergencyIcon.getStyle()
+                    .set("font-size", "1.75rem");
+
+            H3 headerTitle = new H3("Emergency Veterinary Clinics");
+            headerTitle.addClassNames(
+                    LumoUtility.TextColor.HEADER,
+                    LumoUtility.Margin.NONE,
+                    LumoUtility.FontWeight.BOLD,
+                    LumoUtility.FontSize.LARGE);
+
+            titleLayout.add(emergencyIcon, headerTitle);
+
+            // Header right side with close button
+            Button closeButton = new Button(new Icon(VaadinIcon.CLOSE_SMALL));
+            closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY, ButtonVariant.LUMO_ICON);
+            closeButton.addClickListener(e -> dialog.close());
+            closeButton.getStyle()
+                    .set("border-radius", "50%")
+                    .set("padding", "0.5rem");
+
+            headerLayout.add(titleLayout, closeButton);
+            dialog.getHeader().add(headerLayout);
+
+            // Modern content area with better spacing
             VerticalLayout content = new VerticalLayout();
-            content.setPadding(false);
-            content.setSpacing(true);
+            content.setPadding(true);
+            content.setSpacing(false);
+            content.setWidthFull();
 
+            // Location info with modern design
+            Div locationInfo = new Div();
+            locationInfo.addClassNames(
+                    LumoUtility.Background.SUCCESS_10,
+                    LumoUtility.BorderRadius.LARGE,
+                    LumoUtility.Padding.LARGE,
+                    LumoUtility.Margin.Bottom.LARGE);
+
+            locationInfo.getStyle()
+                    .set("border", "1px solid var(--lumo-success-color-10pct)")
+                    .set("backdrop-filter", "blur(10px)");
+
+            HorizontalLayout locationLayout = new HorizontalLayout();
+            locationLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+            locationLayout.setSpacing(true);
+
+            Icon locationIcon = new Icon(VaadinIcon.LOCATION_ARROW);
+            locationIcon.addClassNames(LumoUtility.TextColor.SUCCESS);
+            locationIcon.getStyle().set("font-size", "1.25rem");
+
+            VerticalLayout locationTextLayout = new VerticalLayout();
+            locationTextLayout.setSpacing(false);
+            locationTextLayout.setPadding(false);
+
+            Span locationTitle = new Span("Current Location");
+            locationTitle.addClassNames(
+                    LumoUtility.FontWeight.SEMIBOLD,
+                    LumoUtility.TextColor.SUCCESS,
+                    LumoUtility.FontSize.SMALL);
+
+            Span locationSubtitle = new Span("📍 Based on your device location");
+            locationSubtitle.addClassNames(
+                    LumoUtility.TextColor.SECONDARY,
+                    LumoUtility.FontSize.SMALL);
+
+            locationTextLayout.add(locationTitle, locationSubtitle);
+            locationLayout.add(locationIcon, locationTextLayout);
+            locationInfo.add(locationLayout);
+
+            content.add(locationInfo);
+
+            // Results section
             if (nearbyVets.isArray() && nearbyVets.size() > 0) {
+                // Results count with modern styling
+                Div resultsHeader = new Div();
+                resultsHeader.addClassNames(
+                        LumoUtility.Margin.Bottom.MEDIUM,
+                        LumoUtility.Padding.Horizontal.SMALL);
+
+                Span resultCount = new Span("Found " + nearbyVets.size() + " emergency clinics nearby");
+                resultCount.addClassNames(
+                        LumoUtility.FontWeight.MEDIUM,
+                        LumoUtility.TextColor.SECONDARY,
+                        LumoUtility.FontSize.SMALL);
+
+                resultsHeader.add(resultCount);
+                content.add(resultsHeader);
+
+                // Vet cards container with grid layout
+                Div cardsContainer = new Div();
+                cardsContainer.getStyle()
+                        .set("display", "grid")
+                        .set("gap", "1rem")
+                        .set("grid-template-columns", "1fr")
+                        .set("max-height", "400px")
+                        .set("overflow-y", "auto")
+                        .set("padding", "0.5rem");
+
                 for (JsonNode vetNode : nearbyVets) {
-                    Div vetCard = createVetCard(vetNode);
-                    content.add(vetCard);
+                    Div vetCard = createModernVetCard(vetNode);
+                    cardsContainer.add(vetCard);
                 }
+                content.add(cardsContainer);
             } else {
-                content.add(new Span(
-                        "No emergency veterinary clinics found nearby. Please search online or contact your regular veterinarian."));
+                // Modern no results design
+                Div noResultsCard = new Div();
+                noResultsCard.addClassNames(
+                        LumoUtility.Background.CONTRAST_5,
+                        LumoUtility.BorderRadius.LARGE,
+                        LumoUtility.Padding.XLARGE);
+                noResultsCard.getStyle()
+                        .set("text-align", "center")
+                        .set("border", "1px solid var(--lumo-contrast-10pct)");
+
+                Icon warningIcon = new Icon(VaadinIcon.EXCLAMATION_CIRCLE);
+                warningIcon.addClassNames(
+                        LumoUtility.TextColor.TERTIARY,
+                        LumoUtility.IconSize.LARGE);
+                warningIcon.getStyle()
+                        .set("margin-bottom", "1.5rem")
+                        .set("opacity", "0.7");
+
+                H4 noResultsTitle = new H4("No Emergency Clinics Found");
+                noResultsTitle.addClassNames(
+                        LumoUtility.TextColor.TERTIARY,
+                        LumoUtility.Margin.NONE,
+                        LumoUtility.Margin.Bottom.SMALL,
+                        LumoUtility.FontWeight.MEDIUM);
+
+                Paragraph suggestion = new Paragraph(
+                        "We couldn't find emergency veterinary clinics in your immediate area. " +
+                                "Try expanding your search radius or contact your regular veterinarian.");
+                suggestion.addClassNames(
+                        LumoUtility.TextColor.SECONDARY,
+                        LumoUtility.FontSize.SMALL);
+                suggestion.getStyle()
+                        .set("margin", "0")
+                        .set("line-height", "1.6");
+
+                noResultsCard.add(warningIcon, noResultsTitle, suggestion);
+                content.add(noResultsCard);
             }
 
-            Button closeButton = new Button("Close", e -> dialog.close());
-            closeButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+            // Modern footer
+            HorizontalLayout footer = new HorizontalLayout();
+            footer.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
+            footer.setWidthFull();
+            footer.setPadding(true);
+            footer.getStyle()
+                    .set("border-top", "1px solid var(--lumo-contrast-10pct)")
+                    .set("background", "var(--lumo-base-color)");
 
-            dialog.getFooter().add(closeButton);
-            dialog.add(content);
+            Button refreshButton = new Button("Refresh", new Icon(VaadinIcon.REFRESH));
+            refreshButton.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+            refreshButton.setTooltipText("Search again");
+            refreshButton.addClickListener(e -> {
+                dialog.close();
+                findNearbyEmergencyVets();
+            });
+
+            Button closeFooterButton = new Button("Close", new Icon(VaadinIcon.CLOSE));
+            closeFooterButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+            closeFooterButton.addClickListener(e -> dialog.close());
+
+            footer.add(refreshButton, closeFooterButton);
+            dialog.getFooter().add(footer);
+
+            // Make content scrollable with modern scroller
+            Scroller scroller = new Scroller(content);
+            scroller.setScrollDirection(Scroller.ScrollDirection.VERTICAL);
+            scroller.getStyle()
+                    .set("max-height", "500px")
+                    .set("padding", "0")
+                    .set("background", "var(--lumo-base-color)");
+
+            dialog.add(scroller);
+
+            // Modern dialog styling
+            dialog.getElement().getStyle()
+                    .set("border-radius", "16px")
+                    .set("box-shadow", "0 20px 60px rgba(0, 0, 0, 0.15)")
+                    .set("border", "none")
+                    .set("backdrop-filter", "blur(20px)")
+                    .set("background", "rgba(var(--lumo-base-color-rgb), 0.95)");
+
             dialog.open();
+
+            // Smooth entrance animation
+            dialog.getElement().executeJs(
+                    "this.style.opacity = '0';" +
+                            "this.style.transform = 'scale(0.96) translateY(20px)';" +
+                            "this.animate([" +
+                            "  { opacity: '0', transform: 'scale(0.96) translateY(20px)' }," +
+                            "  { opacity: '1', transform: 'scale(1) translateY(0)' }" +
+                            "], { " +
+                            "  duration: 300, " +
+                            "  easing: 'cubic-bezier(0.16, 1, 0.3, 1)' " +
+                            "}).finished.then(() => {" +
+                            "  this.style.opacity = '';" +
+                            "  this.style.transform = '';" +
+                            "});");
 
         } catch (Exception e) {
             System.err.println("Error parsing nearby vets response: " + e.getMessage());
-            Notification.show("Error displaying nearby vets. Please try again later.", 3000,
+
+            Notification notification = Notification.show(
+                    "Unable to display emergency clinics. Please try again.",
+                    4000,
                     Notification.Position.BOTTOM_START);
+            notification.addThemeVariants(NotificationVariant.LUMO_ERROR);
         }
+    }
+
+    private Div createModernVetCard(JsonNode vetNode) {
+        Div card = new Div();
+        card.addClassNames(
+                LumoUtility.Background.BASE,
+                LumoUtility.BorderRadius.LARGE,
+                LumoUtility.Padding.LARGE);
+
+        card.getStyle()
+                .set("border", "1px solid var(--lumo-contrast-10pct)")
+                .set("transition", "all 0.2s ease")
+                .set("cursor", "pointer")
+                .set("box-shadow", "0 2px 8px rgba(0,0,0,0.04)")
+                .set("position", "relative");
+
+        // Hover effects
+        card.getElement().addEventListener("mouseenter", e -> {
+            card.getStyle()
+                    .set("transform", "translateY(-2px)")
+                    .set("box-shadow", "0 8px 24px rgba(0,0,0,0.12)")
+                    .set("border-color", "var(--lumo-primary-color-30pct)");
+        });
+
+        card.getElement().addEventListener("mouseleave", e -> {
+            card.getStyle()
+                    .set("transform", "translateY(0)")
+                    .set("box-shadow", "0 2px 8px rgba(0,0,0,0.04)")
+                    .set("border-color", "var(--lumo-contrast-10pct)");
+        });
+
+        // Emergency badge floating top right
+        Span emergencyBadge = new Span("🚨 EMERGENCY");
+        emergencyBadge.addClassNames(
+                LumoUtility.Background.ERROR,
+                LumoUtility.TextColor.ERROR_CONTRAST,
+                LumoUtility.FontSize.XXSMALL,
+                LumoUtility.FontWeight.BOLD,
+                LumoUtility.Padding.Horizontal.SMALL,
+                LumoUtility.Padding.Vertical.XSMALL,
+                LumoUtility.BorderRadius.MEDIUM);
+        emergencyBadge.getStyle()
+                .set("position", "absolute")
+                .set("top", "0.75rem")
+                .set("right", "0.75rem")
+                .set("text-transform", "uppercase")
+                .set("letter-spacing", "0.5px");
+
+        card.add(emergencyBadge);
+
+        // Clinic name
+        H4 name = new H4(vetNode.path("name").asText("Unknown Clinic"));
+        name.addClassNames(
+                LumoUtility.TextColor.HEADER,
+                LumoUtility.Margin.NONE,
+                LumoUtility.Margin.Bottom.SMALL,
+                LumoUtility.FontWeight.BOLD,
+                LumoUtility.FontSize.MEDIUM);
+
+        card.add(name);
+
+        // Details container
+        VerticalLayout details = new VerticalLayout();
+        details.setSpacing(true);
+        details.setPadding(false);
+
+        // Address
+        if (!vetNode.path("address").isMissingNode()) {
+            HorizontalLayout addressLayout = new HorizontalLayout();
+            addressLayout.setSpacing(true);
+            addressLayout.setAlignItems(FlexComponent.Alignment.START);
+
+            Icon addressIcon = new Icon(VaadinIcon.MAP_MARKER);
+            addressIcon.addClassNames(LumoUtility.TextColor.SECONDARY);
+            addressIcon.getStyle()
+                    .set("font-size", "0.875rem")
+                    .set("flex-shrink", "0");
+
+            Span address = new Span(vetNode.path("address").asText());
+            address.addClassNames(LumoUtility.TextColor.SECONDARY, LumoUtility.FontSize.SMALL);
+            address.getStyle().set("line-height", "1.4");
+
+            addressLayout.add(addressIcon, address);
+            details.add(addressLayout);
+        }
+
+        // Phone
+        if (!vetNode.path("phone").isMissingNode()) {
+            HorizontalLayout phoneLayout = new HorizontalLayout();
+            phoneLayout.setSpacing(true);
+            phoneLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+
+            Icon phoneIcon = new Icon(VaadinIcon.PHONE);
+            phoneIcon.addClassNames(LumoUtility.TextColor.SUCCESS);
+            phoneIcon.getStyle()
+                    .set("font-size", "0.875rem");
+
+            String phoneNumber = vetNode.path("phone").asText();
+            Anchor phoneLink = new Anchor("tel:" + phoneNumber, phoneNumber);
+            phoneLink.addClassNames(
+                    LumoUtility.TextColor.SUCCESS,
+                    LumoUtility.FontWeight.MEDIUM,
+                    LumoUtility.FontSize.SMALL);
+            phoneLink.getStyle()
+                    .set("text-decoration", "none");
+
+            phoneLayout.add(phoneIcon, phoneLink);
+            details.add(phoneLayout);
+        }
+
+        // Distance
+        if (!vetNode.path("distance").isMissingNode()) {
+            HorizontalLayout distanceLayout = new HorizontalLayout();
+            distanceLayout.setSpacing(true);
+            distanceLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+
+            Icon distanceIcon = new Icon(VaadinIcon.ROAD);
+            distanceIcon.addClassNames(LumoUtility.TextColor.PRIMARY);
+            distanceIcon.getStyle()
+                    .set("font-size", "0.875rem");
+
+            Span distance = new Span(vetNode.path("distance").asText() + " away");
+            distance.addClassNames(LumoUtility.TextColor.PRIMARY, LumoUtility.FontSize.SMALL);
+
+            distanceLayout.add(distanceIcon, distance);
+            details.add(distanceLayout);
+        }
+
+        card.add(details);
+        return card;
     }
 
     @ClientCallable
@@ -1397,53 +2000,41 @@ public class ChatView extends VerticalLayout {
         findNearbyEmergencyVets();
     }
 
-    private Div createVetCard(JsonNode vetNode) {
-        Div card = new Div();
-        card.getStyle()
-                .set("border", "1px solid #e5e7eb")
-                .set("border-radius", "8px")
-                .set("padding", "16px")
-                .set("margin-bottom", "12px")
-                .set("background", "white");
-
-        H4 name = new H4(vetNode.path("name").asText("Veterinary Clinic"));
-        name.getStyle().set("margin", "0 0 8px 0").set("color", "#1f2937");
-
-        Span address = new Span(vetNode.path("address").asText("Address not available"));
-        address.getStyle().set("color", "#6b7280").set("font-size", "14px");
-
-        Span phone = new Span("📞 " + vetNode.path("phoneNumber").asText("Contact for phone"));
-        phone.getStyle().set("color", "#374151").set("font-size", "14px");
-
-        double distance = vetNode.path("distanceKm").asDouble(0);
-        Span distanceSpan = new Span(String.format("📍 %.1f km away", distance));
-        distanceSpan.getStyle().set("color", "#059669").set("font-weight", "600").set("font-size", "14px");
-
-        HorizontalLayout info = new HorizontalLayout(phone, distanceSpan);
-        info.setSpacing(true);
-        info.setAlignItems(FlexComponent.Alignment.CENTER);
-
-        card.add(name, address, info);
-
-        return card;
-    }
-
     private void scrollToBottom() {
         getUI().ifPresent(ui -> ui.access(() -> {
-            // Use a more reliable scrolling method
+            // Use a more reliable scrolling method with smooth animation
             messagesScroller.getElement().executeJs("""
-                        // Scroll to bottom immediately
-                        this.scrollTop = this.scrollHeight;
+                        // Function to scroll smoothly to bottom
+                        function smoothScrollToBottom() {
+                            const scroller = this;
+                            const targetScrollTop = scroller.scrollHeight;
+                            const startingScrollTop = scroller.scrollTop;
+                            const distance = targetScrollTop - startingScrollTop;
+                            const duration = 300; // ms
+                            const startTime = performance.now();
 
-                        // Also add a slight delay scroll to catch any DOM updates
-                        setTimeout(() => {
-                            this.scrollTop = this.scrollHeight;
-                        }, 50);
+                            function scrollStep(timestamp) {
+                                const currentTime = timestamp || performance.now();
+                                const timeElapsed = currentTime - startTime;
+                                const progress = Math.min(timeElapsed / duration, 1);
 
-                        // Another safety scroll after animations
-                        setTimeout(() => {
-                            this.scrollTop = this.scrollHeight;
-                        }, 200);
+                                // Easing function (easeOutQuad)
+                                const ease = progress * (2 - progress);
+
+                                scroller.scrollTop = startingScrollTop + (distance * ease);
+
+                                if (timeElapsed < duration) {
+                                    requestAnimationFrame(scrollStep);
+                                } else {
+                                    scroller.scrollTop = targetScrollTop;
+                                }
+                            }
+
+                            requestAnimationFrame(scrollStep);
+                        }
+
+                        // Start smooth scroll
+                        smoothScrollToBottom.call(this);
                     """);
         }));
     }
@@ -1528,7 +2119,6 @@ public class ChatView extends VerticalLayout {
                             +
                             "styleSheet.insertRule('div[style*=\"word-wrap: break-word\"] { overflow-wrap: break-word !important; word-break: break-word !important; hyphens: auto !important; max-width: 100% !important; }');");
 
-
             // Add textarea functionality
             ui.getPage().executeJs(
                     "setTimeout(() => {" +
@@ -1604,7 +2194,7 @@ public class ChatView extends VerticalLayout {
 
         H3 title = new H3("Enable Location Access");
         Paragraph description = new Paragraph(
-                "Virtual Vet needs your location to find nearby emergency veterinary clinics " +
+                "Novavet needs your location to find nearby emergency veterinary clinics " +
                         "in case of urgent situations. Your location data is only used for this purpose " +
                         "and is not stored on our servers.");
         description.getStyle().set("max-width", "400px");
@@ -1676,7 +2266,6 @@ public class ChatView extends VerticalLayout {
         this.userLatitude = latitude;
         this.userLongitude = longitude;
 
-        Notification.show("Location detected for emergency vet search", 1000, Notification.Position.BOTTOM_START);
         System.out.println("User location: " + latitude + ", " + longitude);
     }
 
