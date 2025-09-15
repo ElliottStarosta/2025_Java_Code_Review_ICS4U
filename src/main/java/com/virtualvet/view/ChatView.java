@@ -2177,53 +2177,6 @@ public class ChatView extends VerticalLayout {
         });
     }
 
-    private void showLocationPermissionDialog() {
-        Dialog locationDialog = new Dialog();
-        locationDialog.setHeaderTitle("Location Access Required");
-        locationDialog.setModal(true);
-        locationDialog.setCloseOnEsc(false);
-        locationDialog.setCloseOnOutsideClick(false);
-
-        VerticalLayout content = new VerticalLayout();
-        content.setSpacing(true);
-        content.setPadding(true);
-
-        Icon locationIcon = VaadinIcon.LOCATION_ARROW.create();
-        locationIcon.setSize("40px");
-        locationIcon.setColor("#2563eb");
-
-        H3 title = new H3("Enable Location Access");
-        Paragraph description = new Paragraph(
-                "Novavet needs your location to find nearby emergency veterinary clinics " +
-                        "in case of urgent situations. Your location data is only used for this purpose " +
-                        "and is not stored on our servers.");
-        description.getStyle().set("max-width", "400px");
-
-        Button enableButton = new Button("Enable Location", VaadinIcon.CHECK.create());
-        enableButton.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        enableButton.addClickListener(e -> {
-            locationDialog.close();
-            requestUserLocation();
-        });
-
-        Button skipButton = new Button("Skip for Now", VaadinIcon.CLOCK.create());
-        skipButton.addClickListener(e -> {
-            locationDialog.close();
-            // Set default coordinates if user skips
-            this.userLatitude = 45.4215;
-            this.userLongitude = -75.6972;
-        });
-
-        HorizontalLayout buttons = new HorizontalLayout(enableButton, skipButton);
-        buttons.setSpacing(true);
-
-        content.add(locationIcon, title, description, buttons);
-        content.setAlignItems(Alignment.CENTER);
-        locationDialog.add(content);
-
-        locationDialog.open();
-    }
-
     private void requestUserLocation() {
         System.out.println("Requesting user location...");
         getUI().ifPresent(ui -> {
