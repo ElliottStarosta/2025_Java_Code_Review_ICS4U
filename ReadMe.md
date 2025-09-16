@@ -1,7 +1,5 @@
-# Novavet - AI-Powered Veterinary Assistant
 
 ![NovaVet Logo](https://github.com/ElliottStarosta/2025_Java_Code_Review_ICS4U/blob/master/src/main/resources/static/images/icon-full.png?raw=true)
-*[Space for your logo/video demo]*
 
 ## Introduction
 
