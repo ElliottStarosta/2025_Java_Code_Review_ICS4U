@@ -9,6 +9,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 @RestController
+/**
+ * Controller for managing chat-related endpoints.
+ * Handles chat requests, message history, and session management.
+ */
 @RequestMapping("/api/chat")
 @CrossOrigin(origins = {"http://localhost:8080", "https://localhost:8080"})
 public class ChatController {
@@ -17,6 +21,10 @@ public class ChatController {
     private ChatService chatService;
 
     @PostMapping("/start")
+    /**
+     * Starts a new chat conversation session.
+     * @return ResponseEntity with session start response
+     */
     public ResponseEntity<SessionStartResponse> startConversation() {
         try {
             SessionStartResponse response = chatService.startNewConversation();
@@ -28,6 +36,13 @@ public class ChatController {
     }
 
     @PostMapping("/message")
+    /**
+     * Processes a chat message from the user, with optional images.
+     * @param sessionId the session identifier
+     * @param message the user's message
+     * @param images optional image attachments
+     * @return ResponseEntity with chat response
+     */
     public ResponseEntity<ChatResponse> sendMessage(
             @RequestParam("sessionId") String sessionId,
             @RequestParam("message") String message,
@@ -51,6 +66,11 @@ public class ChatController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ChatResponse.error("Failed to process message: " + e.getMessage()));
         }
+    /**
+     * Retrieves the conversation history for a session.
+     * @param sessionId the session identifier
+     * @return ResponseEntity with conversation history
+     */
     }
 
 
@@ -69,6 +89,10 @@ public class ChatController {
             
         } catch (Exception e) {
             ConversationHistoryResponse errorResponse = new ConversationHistoryResponse();
+    /**
+     * Health check endpoint for the chat service.
+     * @return ResponseEntity with health status
+     */
             errorResponse.setSuccess(false);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }

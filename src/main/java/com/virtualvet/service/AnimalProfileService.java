@@ -13,6 +13,23 @@ import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 
+/**
+ * Service for managing animal profile information in the Virtual Vet application.
+ * 
+ * This service handles the extraction, creation, and management of animal profile
+ * data from user messages and conversation context. It includes intelligent parsing
+ * of natural language to extract animal type, breed, age, weight, and symptoms
+ * information, and provides comprehensive profile management functionality.
+ * 
+ * The service uses pattern matching and keyword recognition to automatically
+ * extract pet information from user messages, supports profile completion tracking,
+ * and provides utilities for generating profile summaries and identifying missing
+ * information fields.
+ * 
+ * @author Elliott Starosta
+ * @version 1.0
+ * @since 2025
+ */
 @Service
 @Transactional
 public class AnimalProfileService {

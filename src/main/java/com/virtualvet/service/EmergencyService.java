@@ -14,6 +14,22 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Service for managing emergency veterinary services and location-based assistance.
+ * 
+ * This service provides emergency veterinary support including finding nearby
+ * veterinary clinics, emergency contact information, and location-based services.
+ * It integrates with external mapping services to locate veterinary facilities
+ * and provides comprehensive emergency preparedness information for pet owners.
+ * 
+ * The service includes fallback mechanisms for when external services are unavailable,
+ * maintains a database of default emergency veterinary locations, and provides
+ * emergency assessment capabilities based on urgency levels and symptoms.
+ * 
+ * @author Elliott Starosta
+ * @version 1.0
+ * @since 2025
+ */
 @Service
 public class EmergencyService {
     

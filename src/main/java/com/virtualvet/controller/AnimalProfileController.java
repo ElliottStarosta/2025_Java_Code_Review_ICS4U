@@ -13,16 +13,26 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Controller for handling animal profile related HTTP requests.
+ * Provides endpoints for creating, retrieving, and managing animal profiles.
+ */
 @RestController
 @RequestMapping("/api/profile")
 @CrossOrigin(origins = {"http://localhost:8080", "https://localhost:8080"})
 public class AnimalProfileController {
 
+    /**
+     * Retrieves the animal profile for a given session ID.
+     * @param sessionId the session identifier
+     * @return ResponseEntity containing profile data and status
+     */
     @Autowired
     private AnimalProfileService animalProfileService;
 
     @GetMapping("/{sessionId}")
     public ResponseEntity<Map<String, Object>> getProfile(@PathVariable String sessionId) {
+            // Populate response with profile details and completion status
         try {
             AnimalProfile profile = animalProfileService.getProfileBySessionId(sessionId);
             
@@ -44,6 +54,12 @@ public class AnimalProfileController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
+    /**
+     * Updates the animal profile for a given session ID.
+     * @param sessionId the session identifier
+     * @param profileDto the profile data transfer object
+     * @return ResponseEntity containing updated profile data and status
+     */
             Map<String, Object> error = new HashMap<>();
             error.put("success", false);
             error.put("error", "Failed to retrieve profile: " + e.getMessage());
@@ -52,6 +68,7 @@ public class AnimalProfileController {
     }
     
     @PutMapping("/{sessionId}")
+            // Populate response with updated profile details
     public ResponseEntity<Map<String, Object>> updateProfile(
             @PathVariable String sessionId, 
             @RequestBody AnimalProfileDto profileDto) {
@@ -70,6 +87,11 @@ public class AnimalProfileController {
             } else {
                 response.put("success", false);
                 response.put("error", "Failed to update profile");
+    /**
+     * Converts an AnimalProfile entity to its DTO representation.
+     * @param profile the AnimalProfile entity
+     * @return AnimalProfileDto
+     */
             }
             
             return ResponseEntity.ok(response);
@@ -83,6 +105,11 @@ public class AnimalProfileController {
     }
     
     private AnimalProfileDto convertToDto(AnimalProfile profile) {
+    /**
+     * Converts an AnimalProfileDto to its entity representation.
+     * @param dto the AnimalProfileDto
+     * @return AnimalProfile entity
+     */
         AnimalProfileDto dto = new AnimalProfileDto();
         dto.setId(profile.getId());
         dto.setAnimalType(profile.getAnimalType());

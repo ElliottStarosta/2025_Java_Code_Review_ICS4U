@@ -10,7 +10,6 @@ import com.virtualvet.dto.StructuredVetResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -18,17 +17,62 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Service for managing AI-powered conversation interactions in the Virtual Vet application.
+ * 
+ * This service handles the core AI conversation logic, including generating responses
+ * to user messages, processing image analysis results, building conversation context,
+ * and creating structured veterinary responses. It integrates with external AI services
+ * to provide intelligent, context-aware veterinary advice and recommendations.
+ * 
+ * The service includes comprehensive prompt engineering for veterinary consultations,
+ * structured response parsing, fallback mechanisms for AI service failures, and
+ * sophisticated context management to maintain conversation continuity and accuracy.
+ * 
+ * @author Elliott Starosta
+ * @version 1.0
+ * @since 2025
+ */
 @Service
 public class AIConversationService {
 
+    /**
+     * REST template for making HTTP requests to external AI services.
+     * Used for communicating with the HackClub API for AI-powered responses.
+     */
     @Autowired
     private RestTemplate restTemplate;
 
+    /**
+     * Configuration service for AI service settings and endpoints.
+     * Provides access to API URLs, authentication, and other AI service parameters.
+     */
     @Autowired
     private AIServiceConfig aiServiceConfig;
 
+    /**
+     * Jackson ObjectMapper for JSON serialization and deserialization.
+     * Used for parsing AI responses and converting them to structured data.
+     */
+    /** Jackson ObjectMapper for JSON serialization and deserialization */
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * Comprehensive system prompt that defines the AI assistant's role, personality,
+     * conversation flow rules, and response structure for veterinary consultations.
+     * 
+     * This prompt includes detailed instructions for:
+     * - Professional veterinary assistance and guidance
+     * - Conversational tone and personality guidelines
+     * - Conversation closure rules for resolved issues
+     * - Memory and context management instructions
+     * - Animal profile usage guidelines
+     * - Conversational flow rules with single-question approach
+     * - Language understanding and empathy requirements
+     * - JSON response structure requirements
+     * - Response modes (question, assessment, closure)
+     * - Specific formatting and content guidelines
+     */
     private static final String SYSTEM_PROMPT = "You are a professional virtual veterinary assistant. Your role is to:\n"
             + "1. Help pet owners assess their animal's health concerns\n"
             + "2. Provide general veterinary guidance and education\n"
@@ -171,6 +215,27 @@ public class AIConversationService {
             + "- Make each response feel like part of a natural conversation with a caring veterinary friend\n"
             + "- Use casual, warm language while maintaining professional expertise\n\n";
 
+    /**
+     * Generates an AI response to a user message with conversation context and image analysis.
+     * 
+     * This method processes user input along with conversation context and image analysis
+     * results to generate an appropriate veterinary response. It builds a comprehensive
+     * prompt including all relevant information and calls the external AI service to
+     * generate a response, with fallback handling for service failures.
+     * 
+     * Generates an AI-powered response to a user's message using conversation context and image analysis results.
+     * 
+     * This method orchestrates the complete AI response generation process, including building context prompts,
+     * making API calls to the external AI service, parsing responses, and handling fallback scenarios.
+     * It integrates conversation history, animal profile information, and image analysis results to provide
+     * contextually aware veterinary advice.
+     * 
+     * @param userMessage the user's message or question about their pet
+     * @param context the conversation context containing session information, animal profile, and message history
+     * @param imageAnalyses list of image analysis results from uploaded pet images
+     * @return the AI-generated response text, or a fallback message if the AI service is unavailable
+     * @throws RuntimeException if there's an error processing the request or parsing the response
+     */
     public String generateResponse(String userMessage, ConversationContext context,
             List<AnalysisResult> imageAnalyses) {
         try {
@@ -185,6 +250,18 @@ public class AIConversationService {
         }
     }
 
+    /**
+     * Generates an AI-powered response to a user's message using conversation context and a single image analysis result.
+     * 
+     * This is a convenience method that wraps a single image analysis result in a list and delegates to the
+     * main generateResponse method. It simplifies the API for cases where only one image is being analyzed.
+     * 
+     * @param userMessage the user's message or question about their pet
+     * @param context the conversation context containing session information, animal profile, and message history
+     * @param imageAnalysis single image analysis result from an uploaded pet image, or null if no image
+     * @return the AI-generated response text, or a fallback message if the AI service is unavailable
+     * @see #generateResponse(String, ConversationContext, List)
+     */
     public String generateResponse(String userMessage, ConversationContext context, AnalysisResult imageAnalysis) {
         List<AnalysisResult> imageAnalyses = new ArrayList<>();
         if (imageAnalysis != null) {
@@ -448,6 +525,20 @@ public class AIConversationService {
         return response;
     }
 
+    /**
+     * Generates a structured AI response with detailed veterinary assessment and recommendations.
+     * 
+     * This method creates a comprehensive structured response that includes urgency assessment,
+     * detailed message segments, lists, warnings, recommendations, follow-up questions, and
+     * veterinary contact advice. It provides a more detailed and organized response compared
+     * to the simple text-based generateResponse method.
+     * 
+     * @param userMessage the user's message or question about their pet
+     * @param context the conversation context containing session information, animal profile, and message history
+     * @param imageAnalyses list of image analysis results from uploaded pet images
+     * @return a structured veterinary response with detailed assessment and recommendations
+     * @throws RuntimeException if there's an error processing the request or parsing the response
+     */
     public StructuredVetResponse generateStructuredResponse(String userMessage, ConversationContext context,
             List<AnalysisResult> imageAnalyses) {
         try {
@@ -479,6 +570,18 @@ public class AIConversationService {
         }
     }
 
+    /**
+     * Builds a comprehensive context prompt for AI conversation generation.
+     * 
+     * This method constructs a detailed context prompt that includes conversation history,
+     * animal profile information, and image analysis results. The prompt provides the AI
+     * with all necessary background information to generate contextually aware responses
+     * that reference previous conversations and pet-specific details.
+     * 
+     * @param context the conversation context containing session information, animal profile, and message history
+     * @param imageAnalyses list of image analysis results from uploaded pet images
+     * @return a formatted context prompt string ready for AI processing
+     */
     public String buildContextPrompt(ConversationContext context, List<AnalysisResult> imageAnalyses) {
         StringBuilder contextBuilder = new StringBuilder();
 
@@ -590,6 +693,17 @@ public class AIConversationService {
         return contextBuilder.toString();
     }
 
+    /**
+     * Builds a comprehensive context prompt for AI conversation generation with a single image analysis.
+     * 
+     * This is a convenience method that wraps a single image analysis result in a list and delegates to the
+     * main buildContextPrompt method. It simplifies the API for cases where only one image is being analyzed.
+     * 
+     * @param context the conversation context containing session information, animal profile, and message history
+     * @param imageAnalysis single image analysis result from an uploaded pet image, or null if no image
+     * @return a formatted context prompt string ready for AI processing
+     * @see #buildContextPrompt(ConversationContext, List)
+     */
     public String buildContextPrompt(ConversationContext context, AnalysisResult imageAnalysis) {
         List<AnalysisResult> imageAnalyses = new ArrayList<>();
         if (imageAnalysis != null) {
@@ -672,14 +786,7 @@ public class AIConversationService {
         return baseResponse;
     }
 
-    private String generateFallbackResponse(String userMessage, ConversationContext context,
-            AnalysisResult imageAnalysis) {
-        List<AnalysisResult> imageAnalyses = new ArrayList<>();
-        if (imageAnalysis != null) {
-            imageAnalyses.add(imageAnalysis);
-        }
-        return generateFallbackResponse(userMessage, context, imageAnalyses);
-    }
+    
 
     private boolean containsEmergencyKeywords(String message) {
         List<String> emergencyKeywords = Arrays.asList(
@@ -701,6 +808,17 @@ public class AIConversationService {
         return resolutionKeywords.stream().anyMatch(lowerMessage::contains);
     }
 
+    /**
+     * Builds a customized system prompt that includes specific animal profile information.
+     * 
+     * This method creates a personalized system prompt by incorporating the animal's
+     * specific details (type, breed, age, weight, symptoms) into the base system prompt.
+     * This allows the AI to provide more targeted and relevant advice based on the
+     * pet's specific characteristics and health profile.
+     * 
+     * @param profile the animal profile containing pet-specific information
+     * @return a customized system prompt string with animal profile details integrated
+     */
     public String buildSystemPromptWithProfile(AnimalProfile profile) {
         StringBuilder promptBuilder = new StringBuilder(SYSTEM_PROMPT);
 
@@ -726,6 +844,17 @@ public class AIConversationService {
         return promptBuilder.toString();
     }
 
+    /**
+     * Extracts potential symptoms from text using keyword matching and pattern recognition.
+     * 
+     * This method analyzes text content to identify veterinary symptoms and health concerns
+     * mentioned by pet owners. It uses a comprehensive list of symptom keywords and patterns
+     * to detect various health issues, behavioral changes, and physical symptoms that may
+     * require veterinary attention.
+     * 
+     * @param text the text to analyze for symptoms (typically user messages or conversation history)
+     * @return a list of identified symptoms found in the text
+     */
     public List<String> extractSymptomsFromText(String text) {
         List<String> symptoms = new ArrayList<>();
         String lowerText = text.toLowerCase();
@@ -762,6 +891,16 @@ public class AIConversationService {
         return symptoms;
     }
 
+    /**
+     * Assesses the urgency level from an AI response by analyzing response content for urgency indicators.
+     * 
+     * This method analyzes the AI's response text to determine the urgency level of the veterinary
+     * situation. It looks for specific keywords and phrases that indicate different levels of
+     * urgency, from low-level monitoring to critical emergency situations requiring immediate care.
+     * 
+     * @param aiResponse the AI-generated response text to analyze for urgency indicators
+     * @return the assessed urgency level based on the response content
+     */
     public UrgencyLevel assessUrgencyFromResponse(String aiResponse) {
         String lowerResponse = aiResponse.toLowerCase();
 

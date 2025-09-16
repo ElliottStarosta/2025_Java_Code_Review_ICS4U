@@ -15,13 +15,45 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.theme.lumo.LumoUtility;
 
+/**
+ * Main layout component for the Virtual Vet application.
+ * 
+ * This class provides the primary application layout structure, including the
+ * header with branding, navigation elements, and action buttons. It extends
+ * Vaadin's AppLayout to provide a consistent application shell that wraps
+ * around the main content views.
+ * 
+ * The layout includes:
+ * - Application branding and logo
+ * - Navigation and action buttons
+ * - Responsive header design
+ * - Consistent styling and theming
+ * 
+ * @author Elliott Starosta
+ * @version 1.0
+ * @since 2025
+ */
 // @Push(transport = Transport.WEBSOCKET_XHR)
 public class MainLayout extends AppLayout {
 
+    /**
+     * Constructs a new MainLayout and initializes the header components.
+     * 
+     * This constructor sets up the main application layout by creating
+     * and configuring the header with branding and navigation elements.
+     */
     public MainLayout() {
         createHeader();
     }
 
+    /**
+     * Creates and configures the main header component.
+     * 
+     * This method sets up the header layout by creating the logo container,
+     * action buttons, and arranging them in a horizontal layout with proper
+     * styling, spacing, and alignment. It applies gradient background and
+     * shadow effects for a modern appearance.
+     */
     private void createHeader() {
         // Create logo container with better styling
         HorizontalLayout logoContainer = createLogo();
@@ -50,6 +82,16 @@ public class MainLayout extends AppLayout {
         addToNavbar(header);
     }
 
+    /**
+     * Creates the logo container with application branding.
+     * 
+     * This method creates a horizontal layout containing the application
+     * icon and title text with proper styling and spacing. It uses
+     * Vaadin icons and applies consistent theming to create a professional
+     * brand appearance.
+     * 
+     * @return a HorizontalLayout containing the logo elements
+     */
     private HorizontalLayout createLogo() {
         // App icon/logo
         Image logoIcon = new Image("images/icon-full.png","logo");
@@ -99,6 +141,16 @@ public class MainLayout extends AppLayout {
         return logoContainer;
     }
 
+    /**
+     * Creates the action buttons container with help and emergency functionality.
+     * 
+     * This method creates a horizontal layout containing action buttons for
+     * help/information and emergency functionality. It configures button
+     * styling, icons, and click handlers to provide user assistance and
+     * emergency access features.
+     * 
+     * @return a HorizontalLayout containing the action buttons
+     */
     private HorizontalLayout createActionButtons() {
         // Help/Info button
         Button helpBtn = new Button(new Icon(VaadinIcon.QUESTION_CIRCLE));
@@ -152,6 +204,14 @@ public class MainLayout extends AppLayout {
         return actionButtons;
     }
 
+    /**
+     * Triggers emergency functionality by accessing the current ChatView.
+     * 
+     * This method retrieves the current content view and calls the emergency
+     * functionality if it's a ChatView instance. It provides a way for the
+     * header emergency button to trigger emergency vet search functionality
+     * in the chat interface.
+     */
     private void triggerEmergencyFunctionality() {
         // Get the current content (which should be ChatView)
         Component content = getContent();
@@ -175,6 +235,13 @@ public class MainLayout extends AppLayout {
         }
     }
 
+    /**
+     * Shows a help dialog with application information and usage instructions.
+     * 
+     * This method creates and displays a modal dialog containing helpful
+     * information about the Virtual Vet application, including how to use
+     * the chat interface, upload images, and access emergency services.
+     */
     private void showHelpDialog() {
         Dialog helpDialog = new Dialog();
         helpDialog.setHeaderTitle("Novavet - Help & Information");

@@ -28,6 +28,22 @@ import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 import java.time.Duration;
 
+/**
+ * Service for analyzing animal images using AI-powered visual assessment tools.
+ * 
+ * This service provides comprehensive image analysis capabilities for veterinary
+ * consultation purposes, including AI-powered visual assessment, symptom detection,
+ * and health condition identification. It integrates with both local VQA services
+ * and external AI APIs to provide detailed analysis of pet images.
+ * 
+ * The service includes multiple analysis methods with fallback mechanisms, image
+ * validation and storage, urgency level assessment, and comprehensive reporting
+ * of visual findings to assist in veterinary decision-making.
+ * 
+ * @author Elliott Starosta
+ * @version 1.0
+ * @since 2025
+ */
 @Service
 public class ImageAnalysisService {
 

@@ -32,7 +32,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vaadin.flow.component.upload.receivers.MultiFileMemoryBuffer;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -48,42 +47,99 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Main chat interface for the Virtual Vet application.
+ * 
+ * This view provides the primary user interface for interacting with the virtual veterinary
+ * assistant. It includes a chat-like interface with message history, file upload capabilities,
+ * real-time AI responses, and structured veterinary assessments. The interface is designed
+ * to be intuitive and mobile-friendly, resembling modern messaging applications.
+ * 
+ * Key features include:
+ * - Real-time chat messaging with AI veterinary assistant
+ * - Image upload and analysis capabilities for pet health assessment
+ * - Structured response display with urgency indicators, recommendations, and warnings
+ * - Session management and conversation history
+ * - Geolocation support for finding nearby veterinary clinics
+ * - Responsive design optimized for both desktop and mobile devices
+ * 
+ * The view integrates with the ChatService for backend communication and uses Vaadin
+ * components to provide a modern, interactive user experience.
+ * 
+ * @author Elliott Starosta
+ * @version 1.0
+ * @since 2025
+ */
 @Route(value = "", layout = MainLayout.class)
 @PageTitle("Chat | Novavet")
 public class ChatView extends VerticalLayout {
 
+    // === UI COMPONENTS ===
+    /** Container for all chat messages in the conversation */
     private VerticalLayout messagesContainer;
+    /** Scroller component for the messages area to enable scrolling */
     private Scroller messagesScroller;
+    /** Text input area for user messages */
     private TextArea messageInput;
+    /** Button for sending messages */
     private Button sendButton;
 
+    /** Button for triggering file upload */
     private Button uploadButton;
+    /** Upload component for handling file uploads */
     private Upload upload;
+    /** Buffer for storing uploaded files in memory */
     private MultiFileMemoryBuffer multiFileBuffer;
+    /** List of uploaded files and their metadata */
     private List<UploadedFileData> uploadedFiles = new ArrayList<>();
 
-    private String lastMessageSender = null; // Track who sent the last message
+    // === MESSAGE MANAGEMENT ===
+    /** Tracks who sent the last message to determine message grouping */
+    private String lastMessageSender = null;
+    /** Atomic counter for debouncing rapid Enter key presses */
     private AtomicLong lastEnterTime = new AtomicLong(0);
-    private long debounceMillis = 300; // adjust to taste (300ms = 0.3 sec)
+    /** Debounce delay in milliseconds to prevent duplicate message sends */
+    private long debounceMillis = 300;
+    /** Temporary storage for message content during debouncing */
     private String temporaryMessage = null;
 
-    private List<Div> currentMessageGroup = new ArrayList<>(); // Track current message group
-
-    private StructuredVetResponse lastStructuredResponse;
-
+    /** List of message elements in the current message group */
+    private List<Div> currentMessageGroup = new ArrayList<>();
+    /** Container for image preview thumbnails */
     private Div imagePreviewContainer;
 
+    // === AI RESPONSE HANDLING ===
+    /** Last structured response from the AI for reference */
+    private StructuredVetResponse lastStructuredResponse;
+
+    // === BACKEND SERVICES ===
+    /** Service for handling chat operations and AI communication */
     @Autowired
     private ChatService chatService;
 
+    // === GEOLOCATION ===
+    /** User's latitude for location-based services */
     private double userLatitude = 0.0;
+    /** User's longitude for location-based services */
     private double userLongitude = 0.0;
 
+    // === SESSION MANAGEMENT ===
+    /** Current chat session identifier */
     private String currentSessionId;
+    /** Flag indicating if the system is waiting for an AI response */
     private boolean isWaitingForResponse = false;
+    /** Jackson ObjectMapper for JSON processing */
     private final ObjectMapper objectMapper = new ObjectMapper();
+    /** List of all message elements for tracking and management */
     private List<Div> messageElements = new ArrayList<>();
 
+    /**
+     * Constructs a new ChatView and initializes the user interface.
+     * 
+     * This constructor sets up the full-screen layout, creates all UI components,
+     * configures the layout structure, and starts a new chat session. It initializes
+     * the chat interface with default settings and prepares it for user interaction.
+     */
     public ChatView() {
         setSizeFull();
         setPadding(false);
@@ -95,6 +151,14 @@ public class ChatView extends VerticalLayout {
 
     }
 
+    /**
+     * Creates and initializes all UI components for the chat interface.
+     * 
+     * This method sets up the main components including the messages container,
+     * input area with text field and send button, file upload functionality,
+     * and image preview container. It configures styling and behavior for
+     * each component to create a modern chat-like interface.
+     */
     private void createComponents() {
 
         // Messages container - phone-like chat
@@ -120,6 +184,14 @@ public class ChatView extends VerticalLayout {
                 .set("overflow-y", "auto");
     }
 
+    /**
+     * Creates the message input area with text field, send button, and upload functionality.
+     * 
+     * This method sets up the bottom input area of the chat interface, including
+     * the text area for typing messages, send button, file upload button, and
+     * keyboard shortcuts. It configures styling to match modern messaging apps
+     * and handles user interactions for sending messages and uploading files.
+     */
     private void createInputArea() {
         // Message input with phone-like styling
         messageInput = new TextArea();
@@ -421,6 +493,14 @@ public class ChatView extends VerticalLayout {
         imagePreviewContainer.add(preview);
     }
 
+    /**
+     * Sets up the overall layout structure of the chat interface.
+     * 
+     * This method arranges the main components in a vertical layout with proper
+     * sizing constraints. It ensures the messages area takes up most of the space
+     * while keeping the input area fixed at the bottom, creating a typical
+     * chat application layout.
+     */
     private void setupLayout() {
         // Force the main ChatView to have proper constraints
         getStyle()
@@ -478,6 +558,13 @@ public class ChatView extends VerticalLayout {
         }
     }
 
+    /**
+     * Sends a user message to the AI assistant.
+     * 
+     * This method handles the complete message sending process including validation,
+     * clearing input, adding user message to the UI, and triggering the AI response.
+     * It also manages the waiting state and handles any uploaded files as attachments.
+     */
     @ClientCallable
     private void sendMessage() {
         String message;
@@ -788,6 +875,15 @@ public class ChatView extends VerticalLayout {
         return messages;
     }
 
+    /**
+     * Adds multiple bot messages to the chat interface with typing delays.
+     * 
+     * This method displays a series of bot messages with realistic typing delays
+     * between each message to simulate natural conversation flow. Each message
+     * is added with appropriate styling and avatar display.
+     * 
+     * @param messages list of bot messages to display
+     */
     private void addBotMessages(List<String> messages) {
         for (int i = 0; i < messages.size(); i++) {
             final int index = i;
@@ -821,6 +917,16 @@ public class ChatView extends VerticalLayout {
         }
     }
 
+    /**
+     * Adds a user message to the chat interface with optional file attachments.
+     * 
+     * This method creates and displays a user message with proper styling,
+     * handles file attachments by displaying image previews, and manages
+     * message grouping for better visual organization.
+     * 
+     * @param text the text content of the user message
+     * @param attachments list of uploaded files attached to the message
+     */
     private void addUserMessage(String text, List<UploadedFileData> attachments) {
         // Update message group tracking
         if (!"user".equals(lastMessageSender)) {
@@ -1203,6 +1309,16 @@ public class ChatView extends VerticalLayout {
         scrollToBottom();
     }
 
+    /**
+     * Adds a bot message to the chat interface with optional avatar display.
+     * 
+     * This method creates and displays a bot message with proper styling,
+     * handles message grouping, and can optionally show or hide the bot avatar
+     * based on whether this is the first message in a group or a continuation.
+     * 
+     * @param text the text content of the bot message
+     * @param showAvatar whether to display the bot avatar with this message
+     */
     private void addBotMessage(String text, boolean showAvatar) {
         // Update message group tracking
         if (!"bot".equals(lastMessageSender)) {
@@ -1412,6 +1528,13 @@ public class ChatView extends VerticalLayout {
         return result.toString().trim();
     }
 
+    /**
+     * Shows a typing indicator to indicate the bot is generating a response.
+     * 
+     * This method displays an animated typing indicator with bouncing dots
+     * to provide visual feedback that the AI is processing the user's message
+     * and generating a response.
+     */
     private void showTypingIndicator() {
         Div typingRow = new Div();
         typingRow.setWidthFull();
@@ -1583,6 +1706,13 @@ public class ChatView extends VerticalLayout {
         }
     }
 
+    /**
+     * Finds and displays nearby emergency veterinary clinics.
+     * 
+     * This method searches for emergency veterinary services near the user's
+     * current location using their GPS coordinates. It calls the backend
+     * emergency service and displays the results in a dialog for the user.
+     */
     public void findNearbyEmergencyVets() {
         System.out.println("Finding nearby vets with coordinates: " + userLatitude + ", " + userLongitude);
 
@@ -1995,6 +2125,13 @@ public class ChatView extends VerticalLayout {
         return card;
     }
 
+    /**
+     * Triggers emergency veterinary assistance.
+     * 
+     * This method is called when the user indicates they need immediate
+     * emergency veterinary care. It initiates the process of finding
+     * nearby emergency veterinary clinics.
+     */
     @ClientCallable
     public void triggerEmergency() {
         findNearbyEmergencyVets();
@@ -2039,6 +2176,14 @@ public class ChatView extends VerticalLayout {
         }));
     }
 
+    /**
+     * Starts a new chat session with the AI assistant.
+     * 
+     * This method initiates a new conversation session by calling the backend
+     * chat service to create a new session, then displays a welcome message
+     * to the user. It handles the session creation asynchronously to avoid
+     * blocking the UI thread.
+     */
     private void startNewSession() {
         CompletableFuture.supplyAsync(() -> {
             try {
@@ -2213,6 +2358,16 @@ public class ChatView extends VerticalLayout {
         });
     }
 
+    /**
+     * Handles successful location retrieval from the user's device.
+     * 
+     * This method is called when the browser successfully obtains the user's
+     * GPS coordinates. It stores the location data for use in emergency
+     * veterinary clinic searches and other location-based services.
+     * 
+     * @param latitude the user's latitude coordinate
+     * @param longitude the user's longitude coordinate
+     */
     @ClientCallable
     public void onLocationReceived(double latitude, double longitude) {
         // Store user location for emergency vet searches
@@ -2222,6 +2377,15 @@ public class ChatView extends VerticalLayout {
         System.out.println("User location: " + latitude + ", " + longitude);
     }
 
+    /**
+     * Handles location retrieval errors from the user's device.
+     * 
+     * This method is called when the browser fails to obtain the user's
+     * GPS coordinates due to permission denial, timeout, or other errors.
+     * It logs the error for debugging purposes.
+     * 
+     * @param error the error message describing what went wrong
+     */
     @ClientCallable
     public void onLocationError(String error) {
         System.err.println("Location error: " + error);
@@ -2231,11 +2395,25 @@ public class ChatView extends VerticalLayout {
         this.userLongitude = -75.6972;
     }
 
+    /**
+     * Inner class representing uploaded file data and metadata.
+     * 
+     * This class encapsulates information about files uploaded by users,
+     * including filename, content type, and the actual file data. It provides
+     * utility methods for accessing the data in different formats.
+     */
     private static class UploadedFileData {
         private final String filename;
         private final String contentType;
         private final byte[] data;
 
+        /**
+         * Constructs a new UploadedFileData instance.
+         * 
+         * @param filename the name of the uploaded file
+         * @param contentType the MIME type of the file
+         * @param data the actual file data as byte array
+         */
         public UploadedFileData(String filename, String contentType, byte[] data) {
             this.filename = filename;
             this.contentType = contentType;
@@ -2262,12 +2440,24 @@ public class ChatView extends VerticalLayout {
     // Add these fields to ChatView class
     private List<ConversationMessage> conversationHistory = new ArrayList<>();
 
-    // Add this inner class
+    /**
+     * Inner class representing a conversation message for tracking chat history.
+     * 
+     * This class stores individual messages in the conversation with their
+     * role (user or bot), content, and timestamp for maintaining conversation
+     * context and history.
+     */
     private static class ConversationMessage {
         public String role; // "user" or "bot"
         public String content;
         public long timestamp;
 
+        /**
+         * Constructs a new ConversationMessage instance.
+         * 
+         * @param role the role of the message sender ("user" or "bot")
+         * @param content the text content of the message
+         */
         public ConversationMessage(String role, String content) {
             this.role = role;
             this.content = content;

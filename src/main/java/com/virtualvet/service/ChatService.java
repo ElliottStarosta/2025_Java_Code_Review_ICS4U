@@ -14,6 +14,23 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Service for managing chat conversations and message processing in the Virtual Vet application.
+ * 
+ * This service orchestrates the complete chat workflow, including session management,
+ * message processing, image analysis integration, AI response generation, and conversation
+ * history management. It serves as the central hub for all chat-related operations,
+ * coordinating between various services to provide comprehensive veterinary consultation
+ * capabilities.
+ * 
+ * The service handles user message processing, image upload and analysis, animal profile
+ * updates, AI response generation with structured data, conversation context management,
+ * and provides utilities for conversation history retrieval and message conversion.
+ * 
+ * @author Elliott Starosta
+ * @version 1.0
+ * @since 2025
+ */
 @Service
 @Transactional
 public class ChatService {
