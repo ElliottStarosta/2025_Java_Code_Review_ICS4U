@@ -16,7 +16,6 @@
 * [How to Run the Application](#how-to-run-the-application)
 * [Python VQA Server Setup Details](#python-vqa-server-setup-details)
 * [Demo Video](#demo-video)
-* [Project Structure](#project-structure)
 * [Configuration](#configuration)
 * [Troubleshooting](#troubleshooting)
 * [Support](#support)
@@ -414,32 +413,6 @@ python -c "import torch; import transformers; import flask; print('All imports s
 ## Demo Video
 
 ![Image](https://github.com/user-attachments/assets/36c84d4f-a08d-4686-9178-d1a93682f772)
-
----
-
-## Project Structure
-
-```
-vetbot/
-├── src/main/java/com/virtualvet/
-│   ├── config/          # Application configuration
-│   ├── controller/      # REST API controllers
-│   ├── service/         # Business logic services
-│   ├── model/           # Data models and entities
-│   ├── repository/      # Data access layer
-│   ├── util/            # Utility classes
-│   └── view/            # Vaadin UI components
-├── python_server/       # Python VQA server (if separate)
-│   ├── main.py          # Flask server implementation
-│   ├── requirements.txt # Python dependencies
-│   └── models/          # AI model files
-├── src/main/resources/ 
-│   ├── application.properties  # App config
-│   └── static/images/   # Static assets
-├── uploads/             # User-uploaded images
-├── model_cache/         # Cached AI models
-└── target/              # Build artifacts
-```
 
 ---
 
