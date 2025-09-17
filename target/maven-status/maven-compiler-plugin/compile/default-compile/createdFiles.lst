@@ -1,5 +1,4 @@
 com\virtualvet\repository\AnimalProfileRepository.class
-com\virtualvet\util\Base64MultipartFile.class
 com\virtualvet\dto\ConversationHistoryResponse.class
 com\virtualvet\util\ValidationUtils.class
 com\virtualvet\controller\ChatController.class

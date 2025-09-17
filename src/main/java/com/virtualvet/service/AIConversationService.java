@@ -104,7 +104,7 @@ public class AIConversationService {
             + "CRITICAL MEMORY INSTRUCTIONS:\n"
             + "- ALWAYS read and remember the CONVERSATION CONTEXT provided below\n"
             + "- Remember the pet's name, type, breed, age, weight, medications given, symptoms discussed, and all previous details\n"
-            + "- Reference the animal profile information when relevant (e.g., 'Given that Max is a 3-year-old Golden Retriever...')\n"
+            + "- Reference the animal profile information when relevant (e.g., 'Given that Remy is a 11-year-old labradoodle...')\n"
             + "- Reference previous conversation when relevant (e.g., 'As we discussed about the vomiting earlier...')\n"
             + "- If asked about information shared earlier, recall it from the context\n"
             + "- Build upon previous discussions rather than starting fresh each time\n"
@@ -542,24 +542,13 @@ public class AIConversationService {
     public StructuredVetResponse generateStructuredResponse(String userMessage, ConversationContext context,
             List<AnalysisResult> imageAnalyses) {
         try {
-            System.out.println("DEBUG: generateStructuredResponse called");
-            System.out.println("DEBUG: userMessage = " + userMessage);
-            System.out.println("DEBUG: context = " + context);
-            System.out.println("DEBUG: imageAnalyses = " + (imageAnalyses != null ? imageAnalyses.size() : "null"));
 
-            if (context != null) {
-                System.out.println("DEBUG: context.getAnimalProfile() = " + context.getAnimalProfile());
-                System.out.println("DEBUG: context.getIdentifiedSymptoms() = " + context.getIdentifiedSymptoms());
-            }
 
             String contextPrompt = buildContextPrompt(context, imageAnalyses);
-            System.out.println("DEBUG: contextPrompt built successfully");
 
             String fullPrompt = SYSTEM_PROMPT + "\n\n" + contextPrompt + "\n\nUser: " + userMessage;
-            System.out.println("DEBUG: fullPrompt length = " + fullPrompt.length());
 
             String rawResponse = callHackClubAPI(fullPrompt);
-            System.out.println("DEBUG: rawResponse received");
 
             return parseStructuredResponse(rawResponse);
 
@@ -586,7 +575,6 @@ public class AIConversationService {
         StringBuilder contextBuilder = new StringBuilder();
 
         contextBuilder.append("CONVERSATION CONTEXT:\n");
-        System.out.println("Building context prompt with conversation context: " + context.getAnimalProfile());
 
         if (context == null) {
             context = new ConversationContext("unknown-session");
@@ -680,9 +668,7 @@ public class AIConversationService {
         if (!context.getRecentHistory().isEmpty()) {
             contextBuilder.append("\nRecent Conversation:\n");
             List<Message> recentMessages = context.getRecentHistory();
-            System.out.println("Recent messages: " + recentMessages.stream()
-                    .map(msg -> msg.getMessageType() + ": " + msg.getContent())
-                    .collect(Collectors.joining(" | ")));
+            
 
             for (Message msg : recentMessages) {
                 String role = msg.getMessageType() == MessageType.USER ? "Owner" : "Vet Assistant";
