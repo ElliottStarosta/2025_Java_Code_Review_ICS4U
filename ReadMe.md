@@ -376,14 +376,17 @@ http://localhost:8080/h2-console
 ### Required Python Packages
 
 ```txt
-torch>=1.9.0
-torchvision>=0.10.0
-transformers>=4.12.0
-Pillow>=8.3.0
-flask>=2.0.0
-flask-cors>=3.0.0
-numpy>=1.21.0
-requests>=2.25.0
+flask
+torch
+transformers
+pillow
+accelerate
+protobuf
+numpy
+requests
+safetensors
+tokenizers
+tqdm
 ```
 
 ### Installation Troubleshooting
