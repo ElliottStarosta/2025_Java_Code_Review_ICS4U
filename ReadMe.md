@@ -380,13 +380,6 @@ flask
 torch
 transformers
 pillow
-accelerate
-protobuf
-numpy
-requests
-safetensors
-tokenizers
-tqdm
 ```
 
 ### Installation Troubleshooting
