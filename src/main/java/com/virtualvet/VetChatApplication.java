@@ -162,7 +162,7 @@ class PythonVQAServerManager {
 
     private static final Logger logger = LoggerFactory.getLogger(PythonVQAServerManager.class);
 
-    @Value("${vqa.python.script.path:C:/Users/starl/Documents/GitHub/connections/vetbot/main.py}")
+    @Value("${vqa.python.script.path:main.py}")
     private String pythonScriptPath;
 
     @Value("${vqa.python.executable:python}")
